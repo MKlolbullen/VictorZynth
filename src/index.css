@@ -1,1 +1,184 @@
 @import "tailwindcss";
+
+/* -------------------------------------------------------------
+   SPRING-BASED CSS ANIMATIONS FOR SYNTH CONTROLS & INPUTS
+   (Knobs, Sliders, Dials, Scrubbers in Oscillator & Filter)
+   ------------------------------------------------------------- */
+
+:root {
+  --spring-ease: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --spring-bounce: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  --spring-snap: cubic-bezier(0.25, 1.25, 0.5, 1.1);
+  --spring-press: cubic-bezier(0.2, 0.8, 0.2, 1.2);
+}
+
+/* Knob container spring physics */
+.knob-spring-container {
+  transition: transform 0.26s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.2s ease;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.knob-spring-container:hover {
+  transform: scale(1.045) translateY(-1px);
+}
+
+.knob-spring-container.is-dragging,
+.knob-spring-container:active {
+  transform: scale(0.97) translateY(0.5px);
+  transition: transform 0.12s cubic-bezier(0.2, 0.8, 0.2, 1.2);
+}
+
+/* Center knob cap spring response */
+.knob-cap-spring {
+  transition: transform 0.26s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.22s ease,
+              border-color 0.18s ease;
+  transform-origin: center center;
+}
+
+.knob-spring-container:hover .knob-cap-spring {
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.25), inset 0 1px 3px rgba(255, 255, 255, 0.2);
+}
+
+.knob-spring-container.is-dragging .knob-cap-spring {
+  box-shadow: 0 0 18px rgba(34, 211, 238, 0.45), inset 0 2px 5px rgba(0, 0, 0, 0.7);
+}
+
+/* Dynamic needle spring rotation */
+.knob-needle-spring {
+  transition: transform 0.08s cubic-bezier(0.25, 1.25, 0.5, 1.1);
+  transform-origin: center center;
+}
+
+/* Active SVG arc spring response */
+.knob-arc-spring {
+  transition: stroke-dashoffset 0.09s cubic-bezier(0.25, 1.15, 0.45, 1.05);
+}
+
+/* Value text spring badge */
+.knob-value-spring {
+  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.15s ease;
+}
+
+.knob-spring-container:hover .knob-value-spring {
+  transform: translateY(-0.5px);
+}
+
+.knob-spring-container.is-dragging .knob-value-spring {
+  transform: scale(1.08) translateY(-1px);
+}
+
+/* Custom spring range slider input */
+input[type="range"].tactile-spring-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  background: #18181b;
+  border-radius: 9999px;
+  outline: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+input[type="range"].tactile-spring-slider:hover {
+  background: #27272a;
+}
+
+/* WebKit slider thumb with spring bounce */
+input[type="range"].tactile-spring-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #22d3ee;
+  border: 2px solid #09090b;
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.6), inset 0 1px 2px rgba(255, 255, 255, 0.5);
+  cursor: grab;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.2s ease,
+              background-color 0.2s ease;
+}
+
+input[type="range"].tactile-spring-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+  box-shadow: 0 0 16px rgba(34, 211, 238, 0.85);
+}
+
+input[type="range"].tactile-spring-slider::-webkit-slider-thumb:active {
+  transform: scale(1.1);
+  cursor: grabbing;
+  box-shadow: 0 0 20px rgba(34, 211, 238, 1);
+  transition: transform 0.1s cubic-bezier(0.2, 0.8, 0.2, 1.2);
+}
+
+/* Amber variant */
+input[type="range"].tactile-spring-slider.slider-amber::-webkit-slider-thumb {
+  background: #fbbf24;
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.6), inset 0 1px 2px rgba(255, 255, 255, 0.5);
+}
+input[type="range"].tactile-spring-slider.slider-amber::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+  box-shadow: 0 0 16px rgba(251, 191, 36, 0.85);
+}
+input[type="range"].tactile-spring-slider.slider-amber::-webkit-slider-thumb:active {
+  transform: scale(1.1);
+  box-shadow: 0 0 20px rgba(251, 191, 36, 1);
+}
+
+/* Emerald variant */
+input[type="range"].tactile-spring-slider.slider-emerald::-webkit-slider-thumb {
+  background: #34d399;
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.6), inset 0 1px 2px rgba(255, 255, 255, 0.5);
+}
+input[type="range"].tactile-spring-slider.slider-emerald::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+  box-shadow: 0 0 16px rgba(52, 211, 153, 0.85);
+}
+input[type="range"].tactile-spring-slider.slider-emerald::-webkit-slider-thumb:active {
+  transform: scale(1.1);
+  box-shadow: 0 0 20px rgba(52, 211, 153, 1);
+}
+
+/* Firefox slider thumb */
+input[type="range"].tactile-spring-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #22d3ee;
+  border: 2px solid #09090b;
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.6);
+  cursor: grab;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+}
+
+input[type="range"].tactile-spring-slider::-moz-range-thumb:hover {
+  transform: scale(1.25);
+  box-shadow: 0 0 16px rgba(34, 211, 238, 0.85);
+}
+
+input[type="range"].tactile-spring-slider::-moz-range-thumb:active {
+  transform: scale(1.1);
+  cursor: grabbing;
+}
+
+/* Tactile Spring Buttons / Steppers */
+.tactile-spring-btn {
+  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+              background-color 0.15s ease,
+              border-color 0.15s ease,
+              box-shadow 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.tactile-spring-btn:hover {
+  transform: translateY(-1px) scale(1.03);
+}
+
+.tactile-spring-btn:active {
+  transform: translateY(0.5px) scale(0.96);
+  transition: transform 0.09s cubic-bezier(0.2, 0.8, 0.2, 1.2);
+}

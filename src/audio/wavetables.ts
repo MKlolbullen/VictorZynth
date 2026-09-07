@@ -188,7 +188,8 @@ export function getInterpolatedWave(
   tableId: WavetableId,
   position: number,
   warpMode: WarpMode = 'none',
-  warpAmount: number = 0.0
+  warpAmount: number = 0.0,
+  phase: number = 0.0
 ): Float32Array {
   const def = WAVETABLE_DEFINITIONS[tableId] || WAVETABLE_DEFINITIONS['analog-warmth'];
   const clampedPos = Math.max(0, Math.min(1, position));
@@ -238,6 +239,19 @@ export function getInterpolatedWave(
     }
 
     out[i] = sample;
+  }
+
+  // Apply phase offset to shift the cycle starting point
+  const normalizedPhase = ((phase % 1.0) + 1.0) % 1.0;
+  if (normalizedPhase > 0.001) {
+    const shift = Math.floor(normalizedPhase * TABLE_SIZE);
+    if (shift > 0) {
+      const rotated = new Float32Array(TABLE_SIZE);
+      for (let i = 0; i < TABLE_SIZE; i++) {
+        rotated[i] = out[(i + shift) % TABLE_SIZE];
+      }
+      return rotated;
+    }
   }
 
   return out;

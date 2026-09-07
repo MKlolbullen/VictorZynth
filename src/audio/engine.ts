@@ -79,6 +79,8 @@ export class SynthAudioEngine {
   private osc2PeriodicWave: PeriodicWave | null = null;
   private lastOsc1Pos = -1;
   private lastOsc2Pos = -1;
+  private lastOsc1Phase = -1;
+  private lastOsc2Phase = -1;
 
   // Live modulation metrics exposed to UI
   public liveModValues: LiveModValues = {
@@ -100,10 +102,12 @@ export class SynthAudioEngine {
       osc1_pitch: 0,
       osc1_pos: 0,
       osc1_warp: 0,
+      osc1_phase: 0,
       osc1_level: 0,
       osc2_pitch: 0,
       osc2_pos: 0,
       osc2_warp: 0,
+      osc2_phase: 0,
       osc2_level: 0,
       filter_cutoff: 0,
       filter_res: 0,
@@ -405,19 +409,22 @@ export class SynthAudioEngine {
   public updateWavetables(force = false) {
     if (!this.ctx) return;
 
-    // Check if osc1 position or warp changed
+    // Check if osc1 position, warp, or phase changed
     const osc1Pos = this.state.osc1.position;
-    if (force || Math.abs(osc1Pos - this.lastOsc1Pos) > 0.005) {
+    const osc1Phase = (this.state.osc1.phase ?? 0) + (this.liveModValues.destinations.osc1_phase || 0);
+    if (force || Math.abs(osc1Pos - this.lastOsc1Pos) > 0.005 || Math.abs(osc1Phase - this.lastOsc1Phase) > 0.005) {
       const wave1 = getInterpolatedWave(
         this.state.osc1.tableId,
         osc1Pos,
         this.state.osc1.warpMode,
-        this.state.osc1.warpAmount
+        this.state.osc1.warpAmount,
+        osc1Phase
       );
       const fourier1 = bufferToFourier(wave1, 64);
       try {
         this.osc1PeriodicWave = this.ctx.createPeriodicWave(fourier1.real, fourier1.imag);
         this.lastOsc1Pos = osc1Pos;
+        this.lastOsc1Phase = osc1Phase;
         // Update currently playing voices for osc1
         this.voices.forEach((v) => {
           v.osc1Nodes.forEach((osc) => {
@@ -429,19 +436,22 @@ export class SynthAudioEngine {
       }
     }
 
-    // Check if osc2 position or warp changed
+    // Check if osc2 position, warp, or phase changed
     const osc2Pos = this.state.osc2.position;
-    if (force || Math.abs(osc2Pos - this.lastOsc2Pos) > 0.005) {
+    const osc2Phase = (this.state.osc2.phase ?? 0) + (this.liveModValues.destinations.osc2_phase || 0);
+    if (force || Math.abs(osc2Pos - this.lastOsc2Pos) > 0.005 || Math.abs(osc2Phase - this.lastOsc2Phase) > 0.005) {
       const wave2 = getInterpolatedWave(
         this.state.osc2.tableId,
         osc2Pos,
         this.state.osc2.warpMode,
-        this.state.osc2.warpAmount
+        this.state.osc2.warpAmount,
+        osc2Phase
       );
       const fourier2 = bufferToFourier(wave2, 64);
       try {
         this.osc2PeriodicWave = this.ctx.createPeriodicWave(fourier2.real, fourier2.imag);
         this.lastOsc2Pos = osc2Pos;
+        this.lastOsc2Phase = osc2Phase;
         this.voices.forEach((v) => {
           v.osc2Nodes.forEach((osc) => {
             if (this.osc2PeriodicWave) osc.setPeriodicWave(this.osc2PeriodicWave);
@@ -617,10 +627,12 @@ export class SynthAudioEngine {
       osc1_pitch: 0,
       osc1_pos: 0,
       osc1_warp: 0,
+      osc1_phase: 0,
       osc1_level: 0,
       osc2_pitch: 0,
       osc2_pos: 0,
       osc2_warp: 0,
+      osc2_phase: 0,
       osc2_level: 0,
       filter_cutoff: 0,
       filter_res: 0,

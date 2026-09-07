@@ -185,7 +185,7 @@ export const FilterSection: React.FC<FilterSectionProps> = ({
               key={t.id}
               type="button"
               onClick={() => onFilterChange({ type: t.id })}
-              className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors ${
+              className={`px-1.5 py-0.5 rounded text-[10px] font-mono tactile-spring-btn ${
                 filter.type === t.id
                   ? 'bg-emerald-950 text-emerald-300 font-bold border border-emerald-700/60'
                   : 'text-zinc-400 hover:text-zinc-200'
@@ -204,6 +204,36 @@ export const FilterSection: React.FC<FilterSectionProps> = ({
           <span>Cutoff: {Math.round(effectiveCutoff)} Hz</span>
           <span>•</span>
           <span>Q: {effectiveRes.toFixed(1)}</span>
+        </div>
+      </div>
+
+      {/* Tactile Spring Cutoff Slider */}
+      <div className="bg-zinc-950/70 px-3 py-1.5 rounded border border-zinc-800/90 flex items-center space-x-3 text-xs knob-spring-container">
+        <div className="flex items-center space-x-1.5 shrink-0">
+          <span className="text-[10px] font-mono font-semibold text-emerald-400 uppercase tracking-wider">
+            CUTOFF SLIDER:
+          </span>
+          <span className="font-mono text-zinc-200 text-[11px] w-14 text-right font-medium">
+            {effectiveCutoff >= 1000 ? `${(effectiveCutoff / 1000).toFixed(1)}k` : `${Math.round(effectiveCutoff)}`} Hz
+          </span>
+        </div>
+        <div className="flex-1 relative flex items-center space-x-2">
+          <span className="text-[9px] font-mono text-zinc-500">20Hz</span>
+          <input
+            type="range"
+            min={Math.log10(20)}
+            max={Math.log10(20000)}
+            step={0.005}
+            value={Math.log10(Math.max(20, Math.min(20000, filter.cutoff)))}
+            onChange={(e) => {
+              const logVal = parseFloat(e.target.value);
+              const hz = Math.round(Math.pow(10, logVal));
+              onFilterChange({ cutoff: hz });
+            }}
+            className="tactile-spring-slider slider-emerald flex-1"
+            title="Logarithmic cutoff frequency tactile spring slider"
+          />
+          <span className="text-[9px] font-mono text-zinc-500">20kHz</span>
         </div>
       </div>
 

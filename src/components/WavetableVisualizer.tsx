@@ -8,6 +8,7 @@ interface WavetableVisualizerProps {
   position: number;
   warpMode: WarpMode;
   warpAmount: number;
+  phase?: number;
   modOffset?: number;
   color?: 'cyan' | 'amber';
   onPositionChange?: (pos: number) => void;
@@ -18,6 +19,7 @@ export const WavetableVisualizer: React.FC<WavetableVisualizerProps> = ({
   position,
   warpMode,
   warpAmount,
+  phase = 0,
   modOffset = 0,
   color = 'cyan',
   onPositionChange,
@@ -142,6 +144,25 @@ export const WavetableVisualizer: React.FC<WavetableVisualizerProps> = ({
       ctx.arc(indicatorX, barY + 1.5, 4, 0, Math.PI * 2);
       ctx.fill();
 
+      // Initial cycle starting point marker relative to phase
+      const normPhase = ((phase % 1) + 1) % 1;
+      const phaseX = frontStartX + normPhase * frontSliceWidth;
+      ctx.strokeStyle = color === 'cyan' ? '#22d3ee' : '#f59e0b';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([2, 2]);
+      ctx.beginPath();
+      ctx.moveTo(phaseX, frontBaselineY - frontHeight * 0.5 - 6);
+      ctx.lineTo(phaseX, frontBaselineY + frontHeight * 0.5 + 4);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = color === 'cyan' ? '#22d3ee' : '#f59e0b';
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.arc(phaseX, frontBaselineY, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
     } else {
       // 2D High precision Morph Waveform
       const currentWave = getInterpolatedWave(tableId, effectivePos, warpMode, warpAmount);
@@ -198,8 +219,39 @@ export const WavetableVisualizer: React.FC<WavetableVisualizerProps> = ({
       ctx.lineTo(startX + waveWidth, centerY);
       ctx.stroke();
       ctx.setLineDash([]);
+
+      // Initial cycle starting point marker relative to phase setting
+      const normPhase = ((phase % 1) + 1) % 1;
+      const phaseX = startX + normPhase * waveWidth;
+      const sampleIdx = Math.floor(normPhase * currentWave.length) % currentWave.length;
+      const phaseY = centerY - currentWave[sampleIdx] * amp;
+
+      // Vertical starting line
+      ctx.strokeStyle = color === 'cyan' ? '#22d3ee' : '#f59e0b';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(phaseX, centerY - amp - 4);
+      ctx.lineTo(phaseX, centerY + amp + 4);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Starting point circle
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = color === 'cyan' ? '#38bdf8' : '#fbbf24';
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(phaseX, phaseY, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Starting point label chip
+      ctx.font = 'bold 9px monospace';
+      ctx.fillStyle = color === 'cyan' ? '#67e8f9' : '#fcd34d';
+      const labelX = Math.max(startX + 2, Math.min(startX + waveWidth - 44, phaseX - 18));
+      ctx.fillText(`φ ${Math.round(normPhase * 360)}°`, labelX, centerY - amp - 4);
     }
-  }, [tableId, effectivePos, warpMode, warpAmount, viewMode, color]);
+  }, [tableId, effectivePos, warpMode, warpAmount, phase, viewMode, color]);
 
   // Click & drag interaction to scan position directly on the screen
   const handleInteraction = (clientX: number) => {
@@ -245,7 +297,7 @@ export const WavetableVisualizer: React.FC<WavetableVisualizerProps> = ({
           <button
             type="button"
             onClick={() => setViewMode('3d')}
-            className={`p-1 rounded text-xs transition-colors ${
+            className={`p-1 rounded text-xs tactile-spring-btn ${
               viewMode === '3d'
                 ? color === 'cyan'
                   ? 'bg-cyan-950 text-cyan-400 border border-cyan-800/50'
@@ -259,7 +311,7 @@ export const WavetableVisualizer: React.FC<WavetableVisualizerProps> = ({
           <button
             type="button"
             onClick={() => setViewMode('2d')}
-            className={`p-1 rounded text-xs transition-colors ${
+            className={`p-1 rounded text-xs tactile-spring-btn ${
               viewMode === '2d'
                 ? color === 'cyan'
                   ? 'bg-cyan-950 text-cyan-400 border border-cyan-800/50'

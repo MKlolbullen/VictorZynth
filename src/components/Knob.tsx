@@ -171,7 +171,9 @@ export const Knob: React.FC<KnobProps> = ({
   return (
     <div
       id={id}
-      className="flex flex-col items-center select-none group cursor-ns-resize"
+      className={`flex flex-col items-center select-none group cursor-ns-resize knob-spring-container ${
+        isDragging ? 'is-dragging' : ''
+      }`}
       onMouseDown={handleMouseDown}
       onTouchStart={handleTouchStart}
       onDoubleClick={handleDoubleClick}
@@ -198,7 +200,7 @@ export const Knob: React.FC<KnobProps> = ({
             className="transform rotate-[135deg] origin-center"
           />
 
-          {/* Active Value Arc */}
+          {/* Active Value Arc with spring transition */}
           <circle
             cx={dims.diameter / 2}
             cy={dims.diameter / 2}
@@ -208,8 +210,8 @@ export const Knob: React.FC<KnobProps> = ({
             strokeDasharray={`${arcLength} ${circumference}`}
             strokeDashoffset={strokeDashoffset}
             strokeLinecap="round"
-            style={{ filter: isDragging ? `drop-shadow(0 0 6px ${colorMap.glow})` : undefined }}
-            className={`${colorMap.stroke} transition-all duration-75 transform rotate-[135deg] origin-center`}
+            style={{ filter: isDragging ? `drop-shadow(0 0 7px ${colorMap.glow})` : undefined }}
+            className={`${colorMap.stroke} knob-arc-spring transform rotate-[135deg] origin-center`}
           />
 
           {/* Live Modulation Arc (if modulated) */}
@@ -228,35 +230,44 @@ export const Knob: React.FC<KnobProps> = ({
           )}
         </svg>
 
-        {/* Center Knob Cap */}
+        {/* Center Knob Cap with spring physics and tactile feedback */}
         <div
-          className="absolute rounded-full bg-gradient-to-b from-zinc-800 to-zinc-950 border border-zinc-700 shadow-inner flex items-center justify-center"
+          className={`absolute rounded-full bg-gradient-to-b from-zinc-800 to-zinc-950 border border-zinc-700 shadow-inner flex items-center justify-center knob-cap-spring ${
+            isDragging ? 'border-zinc-500 scale-[0.96]' : 'group-hover:border-zinc-500'
+          }`}
           style={{
             width: dims.diameter - dims.stroke * 3.5,
             height: dims.diameter - dims.stroke * 3.5,
+            boxShadow: isDragging
+              ? `0 0 14px ${colorMap.glow}, inset 0 2px 4px rgba(0,0,0,0.6)`
+              : undefined,
           }}
         >
-          {/* Indicator Needle */}
+          {/* Indicator Needle with spring rotation */}
           <div
-            className="w-full h-full relative flex justify-center"
+            className="w-full h-full relative flex justify-center knob-needle-spring"
             style={{ transform: `rotate(${currentAngle}deg)` }}
           >
-            <div className={`w-[2.5px] h-[35%] rounded-full ${colorMap.dot} shadow-sm mt-1`} />
+            <div
+              className={`w-[2.5px] h-[35%] rounded-full ${colorMap.dot} shadow-sm mt-1 transition-all duration-150 ${
+                isDragging ? 'scale-y-110 brightness-125' : ''
+              }`}
+            />
           </div>
 
-          {/* Center tactile inset */}
-          <div className="absolute w-2.5 h-2.5 rounded-full bg-zinc-900 border border-zinc-800" />
+          {/* Center tactile inset with spring bounce on hover */}
+          <div className="absolute w-2.5 h-2.5 rounded-full bg-zinc-900 border border-zinc-800 transition-transform duration-200 group-hover:scale-110" />
         </div>
       </div>
 
-      {/* Label and Value Display */}
-      <div className="mt-1 flex flex-col items-center">
+      {/* Label and Value Display with spring scale */}
+      <div className="mt-1 flex flex-col items-center knob-value-spring">
         <span className="text-[10px] font-medium text-zinc-400 tracking-wider uppercase truncate max-w-[68px]">
           {label}
         </span>
         <span
-          className={`${dims.text} font-mono font-medium ${
-            isDragging ? colorMap.accent : 'text-zinc-300'
+          className={`${dims.text} font-mono font-medium transition-all duration-150 ${
+            isDragging ? `${colorMap.accent} scale-105 font-bold` : 'text-zinc-300'
           }`}
         >
           {formattedDisplay}

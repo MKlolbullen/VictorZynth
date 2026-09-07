@@ -333,6 +333,8 @@ export default function App() {
               osc2PosModOffset={liveModValues.destinations.osc2_pos}
               osc1WarpModOffset={liveModValues.destinations.osc1_warp}
               osc2WarpModOffset={liveModValues.destinations.osc2_warp}
+              osc1PhaseModOffset={liveModValues.destinations.osc1_phase}
+              osc2PhaseModOffset={liveModValues.destinations.osc2_phase}
               onOsc1Change={(params) =>
                 updateSynth({ osc1: { ...synthState.osc1, ...params } })
               }
@@ -364,6 +366,8 @@ export default function App() {
               hoveredModSource={hoveredModSource}
               modMatrix={synthState.modMatrix}
               liveModValues={liveModValues}
+              osc1={synthState.osc1}
+              osc2={synthState.osc2}
             />
           </div>
         </div>

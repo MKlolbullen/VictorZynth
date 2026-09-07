@@ -24,10 +24,12 @@ export type ModDestination =
   | 'osc1_pitch'
   | 'osc1_pos'
   | 'osc1_warp'
+  | 'osc1_phase'
   | 'osc1_level'
   | 'osc2_pitch'
   | 'osc2_pos'
   | 'osc2_warp'
+  | 'osc2_phase'
   | 'osc2_level'
   | 'filter_cutoff'
   | 'filter_res'
@@ -62,6 +64,7 @@ export interface OscillatorParams {
   pan: number; // -1.0 to 1.0
   level: number; // 0.0 to 1.0
   enabled: boolean;
+  phase?: number; // 0.0 to 1.0 (phase offset, 0° to 360°)
 }
 
 export interface SubOscParams {

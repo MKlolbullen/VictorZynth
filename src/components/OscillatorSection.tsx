@@ -3,6 +3,7 @@ import { OscillatorParams, SubOscParams, NoiseParams, WavetableId, WarpMode } fr
 import { WAVETABLE_DEFINITIONS } from '../audio/wavetables';
 import { WavetableVisualizer } from './WavetableVisualizer';
 import { Knob } from './Knob';
+import { PhaseOffsetDial } from './PhaseOffsetDial';
 import { Power, Radio, Volume2, Sparkles } from 'lucide-react';
 
 interface OscillatorSectionProps {
@@ -14,6 +15,8 @@ interface OscillatorSectionProps {
   osc2PosModOffset: number;
   osc1WarpModOffset: number;
   osc2WarpModOffset: number;
+  osc1PhaseModOffset?: number;
+  osc2PhaseModOffset?: number;
   onOsc1Change: (params: Partial<OscillatorParams>) => void;
   onOsc2Change: (params: Partial<OscillatorParams>) => void;
   onSubChange: (params: Partial<SubOscParams>) => void;
@@ -29,6 +32,8 @@ export const OscillatorSection: React.FC<OscillatorSectionProps> = ({
   osc2PosModOffset,
   osc1WarpModOffset,
   osc2WarpModOffset,
+  osc1PhaseModOffset = 0,
+  osc2PhaseModOffset = 0,
   onOsc1Change,
   onOsc2Change,
   onSubChange,
@@ -48,7 +53,7 @@ export const OscillatorSection: React.FC<OscillatorSectionProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('osc1')}
-              className={`flex items-center space-x-1.5 px-3 py-1 text-xs font-semibold rounded transition-all ${
+              className={`flex items-center space-x-1.5 px-3 py-1 text-xs font-semibold rounded tactile-spring-btn ${
                 activeTab === 'osc1'
                   ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-700/50 shadow-sm'
                   : 'text-zinc-400 hover:text-zinc-200'
@@ -64,7 +69,7 @@ export const OscillatorSection: React.FC<OscillatorSectionProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('osc2')}
-              className={`flex items-center space-x-1.5 px-3 py-1 text-xs font-semibold rounded transition-all ${
+              className={`flex items-center space-x-1.5 px-3 py-1 text-xs font-semibold rounded tactile-spring-btn ${
                 activeTab === 'osc2'
                   ? 'bg-amber-950/80 text-amber-300 border border-amber-700/50 shadow-sm'
                   : 'text-zinc-400 hover:text-zinc-200'
@@ -85,7 +90,7 @@ export const OscillatorSection: React.FC<OscillatorSectionProps> = ({
           <button
             type="button"
             onClick={() => onSubChange({ enabled: !sub.enabled })}
-            className={`flex items-center space-x-1 px-2 py-0.5 rounded border text-[11px] font-mono transition-colors ${
+            className={`flex items-center space-x-1 px-2 py-0.5 rounded border text-[11px] font-mono tactile-spring-btn ${
               sub.enabled
                 ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/50'
                 : 'bg-zinc-950 text-zinc-500 border-zinc-800'
@@ -98,7 +103,7 @@ export const OscillatorSection: React.FC<OscillatorSectionProps> = ({
           <button
             type="button"
             onClick={() => onNoiseChange({ enabled: !noise.enabled })}
-            className={`flex items-center space-x-1 px-2 py-0.5 rounded border text-[11px] font-mono transition-colors ${
+            className={`flex items-center space-x-1 px-2 py-0.5 rounded border text-[11px] font-mono tactile-spring-btn ${
               noise.enabled
                 ? 'bg-purple-950/60 text-purple-300 border-purple-800/50'
                 : 'bg-zinc-950 text-zinc-500 border-zinc-800'
@@ -119,15 +124,16 @@ export const OscillatorSection: React.FC<OscillatorSectionProps> = ({
             position={osc1.position}
             warpMode={osc1.warpMode}
             warpAmount={osc1.warpAmount}
+            phase={osc1.phase ?? 0}
             modOffset={osc1PosModOffset}
             color="cyan"
             onPositionChange={(pos) => onOsc1Change({ position: pos })}
           />
 
-          {/* Table Selector & Warp Mode Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+          {/* Table Selector, Warp Mode & Phase Offset Indicator Row */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-2 text-xs items-center">
             {/* Table Dropdown */}
-            <div className="flex items-center space-x-2 bg-zinc-950/80 p-1.5 rounded border border-zinc-800">
+            <div className="md:col-span-5 flex items-center space-x-2 bg-zinc-950/80 p-1.5 rounded border border-zinc-800">
               <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Table:</span>
               <select
                 value={osc1.tableId}
@@ -143,7 +149,7 @@ export const OscillatorSection: React.FC<OscillatorSectionProps> = ({
             </div>
 
             {/* Warp Selector */}
-            <div className="flex items-center space-x-2 bg-zinc-950/80 p-1.5 rounded border border-zinc-800">
+            <div className="md:col-span-4 flex items-center space-x-2 bg-zinc-950/80 p-1.5 rounded border border-zinc-800">
               <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Warp:</span>
               <div className="flex space-x-1 flex-1 overflow-x-auto">
                 {warpModes.map((mode) => (
@@ -151,7 +157,7 @@ export const OscillatorSection: React.FC<OscillatorSectionProps> = ({
                     key={mode}
                     type="button"
                     onClick={() => onOsc1Change({ warpMode: mode })}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono uppercase transition-colors ${
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tactile-spring-btn ${
                       osc1.warpMode === mode
                         ? 'bg-cyan-900 text-cyan-200 font-bold'
                         : 'text-zinc-500 hover:text-zinc-300'
@@ -162,10 +168,48 @@ export const OscillatorSection: React.FC<OscillatorSectionProps> = ({
                 ))}
               </div>
             </div>
+
+            {/* Phase Offset Indicator & Dial */}
+            <div className="md:col-span-3">
+              <PhaseOffsetDial
+                phase={osc1.phase ?? 0}
+                modOffset={osc1PhaseModOffset}
+                color="cyan"
+                label="Phase φ"
+                onChange={(val) => onOsc1Change({ phase: val })}
+              />
+            </div>
+          </div>
+
+          {/* Tactile Spring Wavetable Morph Slider for OSC 1 */}
+          <div className="bg-zinc-950/70 px-3 py-1.5 rounded border border-zinc-800/90 flex items-center space-x-3 text-xs knob-spring-container">
+            <div className="flex items-center space-x-1.5 shrink-0">
+              <span className="text-[10px] font-mono font-semibold text-cyan-400 uppercase tracking-wider">
+                WT MORPH:
+              </span>
+              <span className="font-mono text-zinc-200 text-[11px] w-9 text-right font-medium">
+                {Math.round(osc1.position * 100)}%
+              </span>
+            </div>
+            <div className="flex-1 relative flex items-center">
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.005}
+                value={osc1.position}
+                onChange={(e) => onOsc1Change({ position: parseFloat(e.target.value) })}
+                className="tactile-spring-slider"
+                title="Tactile spring slider for wavetable position scrubbing"
+              />
+            </div>
+            <span className="text-[9px] font-mono text-zinc-500 uppercase shrink-0 hidden sm:inline">
+              FRAME {Math.round(osc1.position * 63) + 1}/64
+            </span>
           </div>
 
           {/* Knobs Grid */}
-          <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5 bg-zinc-950/60 p-2.5 rounded border border-zinc-800/80 items-center justify-items-center">
+          <div className="grid grid-cols-3 sm:grid-cols-9 gap-1.5 bg-zinc-950/60 p-2.5 rounded border border-zinc-800/80 items-center justify-items-center">
             <Knob
               label="Position"
               value={osc1.position}
@@ -187,6 +231,17 @@ export const OscillatorSection: React.FC<OscillatorSectionProps> = ({
               modOffset={osc1WarpModOffset}
               formatValue={(v) => `${Math.round(v * 100)}%`}
               onChange={(val) => onOsc1Change({ warpAmount: val })}
+            />
+            <Knob
+              label="Phase"
+              value={osc1.phase ?? 0}
+              min={0}
+              max={1}
+              step={0.005}
+              color="cyan"
+              modOffset={osc1PhaseModOffset}
+              formatValue={(v) => `${Math.round(v * 360)}°`}
+              onChange={(val) => onOsc1Change({ phase: val })}
             />
             <Knob
               label="Octave"
@@ -258,14 +313,15 @@ export const OscillatorSection: React.FC<OscillatorSectionProps> = ({
             position={osc2.position}
             warpMode={osc2.warpMode}
             warpAmount={osc2.warpAmount}
+            phase={osc2.phase ?? 0}
             modOffset={osc2PosModOffset}
             color="amber"
             onPositionChange={(pos) => onOsc2Change({ position: pos })}
           />
 
-          {/* Table Selector & Warp Mode Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-            <div className="flex items-center space-x-2 bg-zinc-950/80 p-1.5 rounded border border-zinc-800">
+          {/* Table Selector, Warp Mode & Phase Offset Row */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-2 text-xs items-center">
+            <div className="md:col-span-5 flex items-center space-x-2 bg-zinc-950/80 p-1.5 rounded border border-zinc-800">
               <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Table:</span>
               <select
                 value={osc2.tableId}
@@ -280,7 +336,7 @@ export const OscillatorSection: React.FC<OscillatorSectionProps> = ({
               </select>
             </div>
 
-            <div className="flex items-center space-x-2 bg-zinc-950/80 p-1.5 rounded border border-zinc-800">
+            <div className="md:col-span-4 flex items-center space-x-2 bg-zinc-950/80 p-1.5 rounded border border-zinc-800">
               <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Warp:</span>
               <div className="flex space-x-1 flex-1 overflow-x-auto">
                 {warpModes.map((mode) => (
@@ -288,7 +344,7 @@ export const OscillatorSection: React.FC<OscillatorSectionProps> = ({
                     key={mode}
                     type="button"
                     onClick={() => onOsc2Change({ warpMode: mode })}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono uppercase transition-colors ${
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tactile-spring-btn ${
                       osc2.warpMode === mode
                         ? 'bg-amber-900 text-amber-200 font-bold'
                         : 'text-zinc-500 hover:text-zinc-300'
@@ -299,10 +355,48 @@ export const OscillatorSection: React.FC<OscillatorSectionProps> = ({
                 ))}
               </div>
             </div>
+
+            {/* Phase Offset Indicator & Dial for OSC 2 */}
+            <div className="md:col-span-3">
+              <PhaseOffsetDial
+                phase={osc2.phase ?? 0}
+                modOffset={osc2PhaseModOffset}
+                color="amber"
+                label="Phase φ"
+                onChange={(val) => onOsc2Change({ phase: val })}
+              />
+            </div>
+          </div>
+
+          {/* Tactile Spring Wavetable Morph Slider for OSC 2 */}
+          <div className="bg-zinc-950/70 px-3 py-1.5 rounded border border-zinc-800/90 flex items-center space-x-3 text-xs knob-spring-container">
+            <div className="flex items-center space-x-1.5 shrink-0">
+              <span className="text-[10px] font-mono font-semibold text-amber-400 uppercase tracking-wider">
+                WT MORPH:
+              </span>
+              <span className="font-mono text-zinc-200 text-[11px] w-9 text-right font-medium">
+                {Math.round(osc2.position * 100)}%
+              </span>
+            </div>
+            <div className="flex-1 relative flex items-center">
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.005}
+                value={osc2.position}
+                onChange={(e) => onOsc2Change({ position: parseFloat(e.target.value) })}
+                className="tactile-spring-slider slider-amber"
+                title="Tactile spring slider for wavetable position scrubbing"
+              />
+            </div>
+            <span className="text-[9px] font-mono text-zinc-500 uppercase shrink-0 hidden sm:inline">
+              FRAME {Math.round(osc2.position * 63) + 1}/64
+            </span>
           </div>
 
           {/* Knobs Grid for OSC 2 */}
-          <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5 bg-zinc-950/60 p-2.5 rounded border border-zinc-800/80 items-center justify-items-center">
+          <div className="grid grid-cols-3 sm:grid-cols-9 gap-1.5 bg-zinc-950/60 p-2.5 rounded border border-zinc-800/80 items-center justify-items-center">
             <Knob
               label="Position"
               value={osc2.position}
@@ -324,6 +418,17 @@ export const OscillatorSection: React.FC<OscillatorSectionProps> = ({
               modOffset={osc2WarpModOffset}
               formatValue={(v) => `${Math.round(v * 100)}%`}
               onChange={(val) => onOsc2Change({ warpAmount: val })}
+            />
+            <Knob
+              label="Phase"
+              value={osc2.phase ?? 0}
+              min={0}
+              max={1}
+              step={0.005}
+              color="amber"
+              modOffset={osc2PhaseModOffset}
+              formatValue={(v) => `${Math.round(v * 360)}°`}
+              onChange={(val) => onOsc2Change({ phase: val })}
             />
             <Knob
               label="Octave"
@@ -401,7 +506,7 @@ export const OscillatorSection: React.FC<OscillatorSectionProps> = ({
                   key={wf}
                   type="button"
                   onClick={() => onSubChange({ waveform: wf })}
-                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono uppercase transition-colors ${
+                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono uppercase tactile-spring-btn ${
                     sub.waveform === wf
                       ? 'bg-emerald-900/80 text-emerald-200 font-bold border border-emerald-700/60'
                       : 'text-zinc-500 hover:text-zinc-300'
@@ -414,7 +519,7 @@ export const OscillatorSection: React.FC<OscillatorSectionProps> = ({
             <button
               type="button"
               onClick={() => onSubChange({ octave: sub.octave === -1 ? -2 : -1 })}
-              className="px-1.5 py-0.5 bg-zinc-900 border border-zinc-700 text-zinc-300 rounded text-[9px] font-mono"
+              className="px-1.5 py-0.5 bg-zinc-900 border border-zinc-700 text-zinc-300 rounded text-[9px] font-mono tactile-spring-btn"
             >
               {sub.octave} Oct
             </button>
@@ -443,7 +548,7 @@ export const OscillatorSection: React.FC<OscillatorSectionProps> = ({
                   key={type}
                   type="button"
                   onClick={() => onNoiseChange({ type })}
-                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono uppercase transition-colors ${
+                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono uppercase tactile-spring-btn ${
                     noise.type === type
                       ? 'bg-purple-900/80 text-purple-200 font-bold border border-purple-700/60'
                       : 'text-zinc-500 hover:text-zinc-300'

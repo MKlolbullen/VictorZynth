@@ -14,6 +14,7 @@ export const INITIAL_SYNTH_STATE: SynthState = {
     pan: -0.2,
     level: 0.85,
     enabled: true,
+    phase: 0,
   },
   osc2: {
     tableId: 'spectral-void',
@@ -28,6 +29,7 @@ export const INITIAL_SYNTH_STATE: SynthState = {
     pan: 0.2,
     level: 0.7,
     enabled: true,
+    phase: 0,
   },
   sub: {
     waveform: 'sine',
