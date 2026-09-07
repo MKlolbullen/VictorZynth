@@ -1,0 +1,6 @@
+{
+  "name": "AetherWave VSTi - Wavetable Synthesizer",
+  "description": "Modular wavetable synthesizer VSTi plugin with real-time waveform visualization, dynamic modulation matrix, and ambient soundscape engine for Reaper DAW.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
