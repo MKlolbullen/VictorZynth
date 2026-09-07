@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#09090b"/>
+    <stop offset="1" stop-color="#111827"/>
+  </linearGradient>
+  <linearGradient id="cyanGlow" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#22d3ee" stop-opacity=".15"/>
+    <stop offset="1" stop-color="#06b6d4" stop-opacity=".03"/>
+  </linearGradient>
+  <filter id="glow"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <style>
+    .t{font-family:Inter,Segoe UI,Arial,sans-serif;fill:#e4e4e7}
+    .m{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;fill:#a1a1aa}
+    .h{font-size:16px;font-weight:700;letter-spacing:1px}
+    .s{font-size:12px}
+    .xs{font-size:10px}
+    .panel{fill:#18181b;stroke:#27272a;stroke-width:1.5}
+    .inner{fill:#0f0f12;stroke:#27272a}
+  </style>
+</defs>
+<rect width="1600" height="900" fill="url(#bg)"/>
+<rect x="0" y="0" width="1600" height="58" fill="#09090b" stroke="#27272a"/>
+<rect x="18" y="13" rx="5" width="320" height="32" fill="#18181b" stroke="#3f3f46"/>
+<circle cx="37" cy="29" r="7" fill="none" stroke="#22d3ee" stroke-width="2"/>
+<path d="M31 30 Q37 20 43 30 Q37 38 31 30" fill="none" stroke="#22d3ee" stroke-width="1.5"/>
+<text x="54" y="27" class="t s" font-weight="700">Track 1: <tspan fill="#22d3ee" font-family="monospace">VSTi: AetherWave</tspan></text>
+<text x="54" y="39" class="m xs">JSFX / VST3 • 48kHz • 128 samples</text>
+<rect x="358" y="13" rx="5" width="110" height="32" fill="#065f46" stroke="#10b981"/>
+<text x="375" y="33" class="t s" font-weight="700">▶ PLAY</text>
+<rect x="480" y="13" rx="5" width="110" height="32" fill="#18181b" stroke="#3f3f46"/>
+<text x="498" y="33" class="t s">● REC WAV</text>
+<rect x="610" y="13" rx="5" width="360" height="32" fill="#18181b" stroke="#3f3f46"/>
+<text x="625" y="25" class="m xs">PATCH</text>
+<text x="625" y="39" class="t s" fill="#67e8f9">Nebula Drift [Atmospheres]</text>
+<rect x="992" y="13" rx="5" width="180" height="32" fill="#18181b" stroke="#3f3f46"/>
+<text x="1010" y="33" class="m s">BPM <tspan fill="#fbbf24" font-weight="700">120</tspan></text>
+<rect x="1188" y="13" rx="5" width="196" height="32" fill="#082f49" stroke="#155e75"/>
+<text x="1206" y="33" class="t s" fill="#67e8f9">REAPER EXPORT</text>
+<text x="1415" y="33" class="m xs">CPU 1.4%</text>
+<rect x="18" y="76" rx="10" width="920" height="270" class="panel"/>
+<text x="34" y="101" class="t h">DUAL WAVETABLE OSCILLATORS</text>
+<text x="785" y="100" class="m xs">64-frame morphing</text>
+<rect x="34" y="118" rx="8" width="432" height="208" class="inner"/>
+<text x="50" y="141" class="t s" font-weight="700" fill="#67e8f9">OSCILLATOR 1</text>
+<text x="365" y="141" class="m xs">BASIC SHAPES</text>
+<path d="M62 210 C95 165 130 245 165 210 S235 165 270 210 S340 250 385 205" fill="none" stroke="#22d3ee" stroke-width="3" filter="url(#glow)"/>
+<path d="M62 225 C100 192 138 250 176 220 S255 184 293 222 S350 244 408 205" fill="none" stroke="#0e7490" stroke-width="1.5" opacity=".8"/>
+<rect x="56" y="262" width="180" height="8" rx="4" fill="#27272a"/><rect x="56" y="262" width="118" height="8" rx="4" fill="#22d3ee"/>
+<text x="56" y="288" class="m xs">WT POS  0.64</text>
+<text x="255" y="288" class="m xs">WARP: BEND</text>
+<text x="56" y="309" class="m xs">UNISON 6 • DETUNE 18c • SPREAD 72%</text>
+<rect x="486" y="118" rx="8" width="432" height="208" class="inner"/>
+<text x="502" y="141" class="t s" font-weight="700" fill="#c4b5fd">OSCILLATOR 2</text>
+<text x="815" y="141" class="m xs">SPECTRAL BELL</text>
+<path d="M514 213 C530 195 548 184 563 190 C582 198 590 245 610 236 C633 225 638 175 660 191 C681 207 688 252 710 225 C731 201 743 178 762 198 C784 220 800 241 825 209 C843 186 869 191 893 223" fill="none" stroke="#a78bfa" stroke-width="3" filter="url(#glow)"/>
+<rect x="508" y="262" width="180" height="8" rx="4" fill="#27272a"/><rect x="508" y="262" width="84" height="8" rx="4" fill="#a78bfa"/>
+<text x="508" y="288" class="m xs">WT POS  0.46</text>
+<text x="707" y="288" class="m xs">WARP: MIRROR</text>
+<text x="508" y="309" class="m xs">UNISON 4 • DETUNE 11c • PHASE 90°</text>
+<rect x="954" y="76" rx="10" width="628" height="128" class="panel"/>
+<text x="972" y="101" class="t h">MULTI-MODE FILTER</text>
+<text x="1450" y="100" class="m xs" fill="#fbbf24">LP 24 dB</text>
+<path d="M988 168 C1070 167 1120 165 1180 152 C1245 137 1280 106 1334 106 C1388 106 1420 132 1552 169" fill="none" stroke="#fbbf24" stroke-width="3"/>
+<text x="990" y="187" class="m xs">CUTOFF 2.47 kHz</text><text x="1142" y="187" class="m xs">RES 38%</text><text x="1255" y="187" class="m xs">DRIVE 12%</text><text x="1388" y="187" class="m xs">KEYTRACK 45%</text>
+<rect x="954" y="218" rx="10" width="628" height="128" class="panel"/>
+<text x="972" y="243" class="t h">MASTER VISUALIZER</text>
+<text x="1459" y="243" class="m xs" fill="#34d399">SPECTRAL OVERLAY</text>
+<path d="M980 304 C1000 290 1020 318 1040 298 S1080 286 1100 305 S1140 320 1160 292 S1200 282 1220 300 S1260 316 1280 292 S1320 274 1340 304 S1380 321 1400 294 S1440 287 1460 305 S1510 314 1550 294" fill="none" stroke="#22d3ee" stroke-width="2"/>
+<path d="M980 326 L1000 321 L1020 325 L1040 314 L1060 324 L1080 309 L1100 322 L1120 302 L1140 319 L1160 287 L1180 315 L1200 280 L1220 312 L1240 294 L1260 318 L1280 300 L1300 321 L1320 309 L1340 324 L1360 316 L1380 326 L1400 319 L1420 327 L1440 322 L1460 328 L1480 323 L1500 328 L1520 325 L1550 330" fill="none" stroke="#34d399" stroke-width="1.4" opacity=".9"/>
+<rect x="18" y="362" rx="10" width="1564" height="162" class="panel"/>
+<text x="34" y="387" class="t h">LFOs • ENVELOPES • MACRO MORPHING</text>
+<g class="m xs"><text x="55" y="416">LFO 1 • SINE • 0.23 Hz</text><text x="350" y="416">LFO 2 • S&amp;H • 1/8 SYNC</text><text x="675" y="416">ENV 1 • AMP</text><text x="970" y="416">ENV 2 • MOD</text><text x="1250" y="416">MACROS</text></g>
+<path d="M55 465 C80 430 105 500 130 465 S180 430 205 465 S255 500 280 465" fill="none" stroke="#38bdf8" stroke-width="2"/>
+<path d="M350 470 L390 440 L430 480 L470 450 L510 490 L555 447" fill="none" stroke="#a78bfa" stroke-width="2"/>
+<path d="M675 490 L705 430 L742 447 L790 470 L835 490" fill="none" stroke="#fbbf24" stroke-width="2"/>
+<path d="M970 490 L998 438 L1040 448 L1095 472 L1145 490" fill="none" stroke="#34d399" stroke-width="2"/>
+<g><circle cx="1275" cy="468" r="22" fill="#0f0f12" stroke="#f43f5e" stroke-width="3"/><line x1="1275" y1="468" x2="1288" y2="452" stroke="#f43f5e" stroke-width="3"/><circle cx="1345" cy="468" r="22" fill="#0f0f12" stroke="#fb923c" stroke-width="3"/><line x1="1345" y1="468" x2="1338" y2="447" stroke="#fb923c" stroke-width="3"/><circle cx="1415" cy="468" r="22" fill="#0f0f12" stroke="#e879f9" stroke-width="3"/><line x1="1415" y1="468" x2="1431" y2="457" stroke="#e879f9" stroke-width="3"/><circle cx="1485" cy="468" r="22" fill="#0f0f12" stroke="#2dd4bf" stroke-width="3"/><line x1="1485" y1="468" x2="1478" y2="446" stroke="#2dd4bf" stroke-width="3"/></g>
+<rect x="18" y="540" rx="10" width="1564" height="188" class="panel"/>
+<text x="34" y="566" class="t h">MODULAR MODULATION MATRIX</text>
+<text x="319" y="565" class="m xs">(6 Active Patch Cords)</text>
+<rect x="1320" y="551" rx="5" width="112" height="24" fill="#083344" stroke="#155e75"/><text x="1336" y="568" class="t xs" fill="#67e8f9">MODULAR CABLES</text>
+<rect x="1442" y="551" rx="5" width="118" height="24" fill="#164e63" stroke="#0891b2"/><text x="1463" y="568" class="t xs" fill="#cffafe">+ ADD CABLE</text>
+<rect x="34" y="585" rx="7" width="1512" height="123" fill="#09090b" stroke="#27272a"/>
+<g class="m xs"><circle cx="62" cy="610" r="6" fill="#38bdf8"/><text x="76" y="614">LFO 1</text><circle cx="62" cy="636" r="6" fill="#a78bfa"/><text x="76" y="640">LFO 2</text><circle cx="62" cy="662" r="6" fill="#fbbf24"/><text x="76" y="666">Env 1 (Amp)</text><circle cx="62" cy="688" r="6" fill="#f43f5e"/><text x="76" y="692">M1: Space</text><text x="1490" y="614" text-anchor="end">Osc 1 WT Pos</text><circle cx="1515" cy="610" r="6" fill="#34d399"/><text x="1490" y="640" text-anchor="end">Filter Cutoff</text><circle cx="1515" cy="636" r="6" fill="#34d399"/><text x="1490" y="666" text-anchor="end">Reverb Wet</text><circle cx="1515" cy="662" r="6" fill="#34d399"/><text x="1490" y="692" text-anchor="end">Stereo Pan</text><circle cx="1515" cy="688" r="6" fill="#34d399"/></g>
+<path d="M62 610 C440 675 1050 570 1515 636" fill="none" stroke="#38bdf8" stroke-width="2.5"/><path d="M62 636 C420 710 1080 580 1515 610" fill="none" stroke="#a78bfa" stroke-width="2.5"/><path d="M62 662 C430 585 1000 735 1515 662" fill="none" stroke="#fbbf24" stroke-width="2.5"/><path d="M62 688 C520 620 1030 675 1515 692" fill="none" stroke="#f43f5e" stroke-width="2.5"/>
+<rect x="18" y="744" rx="10" width="1065" height="138" class="panel"/><text x="34" y="770" class="t h">AMBIENT EFFECTS CHAIN</text><g class="m xs"><text x="60" y="804">CHORUS</text><text x="250" y="804">DELAY</text><text x="440" y="804">REVERB</text><text x="630" y="804">DRIVE</text><text x="825" y="804">MASTER</text></g><g fill="#0f0f12" stroke="#3f3f46"><circle cx="92" cy="839" r="25"/><circle cx="282" cy="839" r="25"/><circle cx="472" cy="839" r="25"/><circle cx="662" cy="839" r="25"/><circle cx="857" cy="839" r="25"/></g><g stroke-width="3"><line x1="92" y1="839" x2="104" y2="820" stroke="#38bdf8"/><line x1="282" y1="839" x2="296" y2="823" stroke="#a78bfa"/><line x1="472" y1="839" x2="462" y2="817" stroke="#34d399"/><line x1="662" y1="839" x2="678" y2="827" stroke="#f97316"/><line x1="857" y1="839" x2="868" y2="820" stroke="#22d3ee"/></g>
+<rect x="1099" y="744" rx="10" width="483" height="138" class="panel"/><text x="1117" y="770" class="t h">VIRTUAL KEYBOARD</text><rect x="1118" y="790" width="430" height="74" fill="#fafafa" rx="4"/><g stroke="#18181b"><line x1="1154" y1="790" x2="1154" y2="864"/><line x1="1190" y1="790" x2="1190" y2="864"/><line x1="1226" y1="790" x2="1226" y2="864"/><line x1="1262" y1="790" x2="1262" y2="864"/><line x1="1298" y1="790" x2="1298" y2="864"/><line x1="1334" y1="790" x2="1334" y2="864"/><line x1="1370" y1="790" x2="1370" y2="864"/><line x1="1406" y1="790" x2="1406" y2="864"/><line x1="1442" y1="790" x2="1442" y2="864"/><line x1="1478" y1="790" x2="1478" y2="864"/><line x1="1514" y1="790" x2="1514" y2="864"/></g><g fill="#18181b"><rect x="1143" y="790" width="20" height="44"/><rect x="1179" y="790" width="20" height="44"/><rect x="1251" y="790" width="20" height="44"/><rect x="1287" y="790" width="20" height="44"/><rect x="1323" y="790" width="20" height="44"/><rect x="1395" y="790" width="20" height="44"/><rect x="1431" y="790" width="20" height="44"/><rect x="1503" y="790" width="20" height="44"/></g><text x="1120" y="878" class="m xs">DRONE MODE • OCTAVE 4 • WEB MIDI READY</text>
+</svg>
