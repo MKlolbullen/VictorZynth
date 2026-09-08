@@ -55,6 +55,7 @@ target_include_directories(VictorZynth PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/plugi
 target_compile_definitions(VictorZynth
     PUBLIC
         JUCE_USE_CURL=0
+        JUCE_VST3_CAN_REPLACE_VST2=0
     PRIVATE
         AETHERWAVE_WEB_DEV_SERVER=$<BOOL:${AETHERWAVE_WEB_DEV_SERVER}>
         $<$<PLATFORM_ID:Windows>:JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1>
