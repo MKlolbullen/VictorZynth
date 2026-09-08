@@ -11,6 +11,8 @@ import {
   FileCode,
   Filter,
   Bookmark,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 
 interface ReaperHostBarProps {
@@ -29,6 +31,12 @@ interface ReaperHostBarProps {
   onMasterVolumeChange: (vol: number) => void;
   onOpenReaperExport: () => void;
   onStartAudio: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  undoCount?: number;
+  redoCount?: number;
 }
 
 export const ReaperHostBar: React.FC<ReaperHostBarProps> = ({
@@ -47,6 +55,12 @@ export const ReaperHostBar: React.FC<ReaperHostBarProps> = ({
   onMasterVolumeChange: _onMasterVolumeChange,
   onOpenReaperExport,
   onStartAudio,
+  canUndo = false,
+  canRedo = false,
+  onUndo,
+  onRedo,
+  undoCount = 0,
+  redoCount = 0,
 }) => {
   // Categories list
   const categories = [
@@ -265,8 +279,59 @@ export const ReaperHostBar: React.FC<ReaperHostBarProps> = ({
         </div>
       </div>
 
-      {/* 4. Reaper Export & Integration Button */}
+      {/* 4. Undo / Redo & Reaper Export Buttons */}
       <div className="flex items-center space-x-2">
+        {/* Undo / Redo State Stack Controls */}
+        <div className="flex items-center space-x-0.5 bg-zinc-900/90 p-0.5 rounded border border-zinc-800 shadow-sm">
+          <button
+            type="button"
+            onClick={onUndo}
+            disabled={!canUndo}
+            className={`p-1.5 rounded text-xs font-mono flex items-center space-x-1 transition-all tactile-spring-btn ${
+              canUndo
+                ? 'text-zinc-200 hover:text-cyan-300 hover:bg-zinc-800 active:scale-95'
+                : 'text-zinc-600 cursor-not-allowed opacity-40'
+            }`}
+            title={
+              canUndo
+                ? `Undo last parameter change (Ctrl+Z / Cmd+Z) • ${undoCount} change${undoCount === 1 ? '' : 's'} in stack`
+                : 'Undo (Ctrl+Z / Cmd+Z) - No changes to revert'
+            }
+          >
+            <Undo2 className="w-3.5 h-3.5" />
+            <span className="sr-only">Undo</span>
+            {undoCount > 0 && (
+              <span className="text-[9px] font-mono text-zinc-400 pl-0.5 hidden xl:inline">
+                {undoCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={onRedo}
+            disabled={!canRedo}
+            className={`p-1.5 rounded text-xs font-mono flex items-center space-x-1 transition-all tactile-spring-btn ${
+              canRedo
+                ? 'text-zinc-200 hover:text-cyan-300 hover:bg-zinc-800 active:scale-95'
+                : 'text-zinc-600 cursor-not-allowed opacity-40'
+            }`}
+            title={
+              canRedo
+                ? `Redo parameter change (Ctrl+Y / Cmd+Shift+Z) • ${redoCount} change${redoCount === 1 ? '' : 's'} in stack`
+                : 'Redo (Ctrl+Y / Cmd+Shift+Z)'
+            }
+          >
+            <Redo2 className="w-3.5 h-3.5" />
+            <span className="sr-only">Redo</span>
+            {redoCount > 0 && (
+              <span className="text-[9px] font-mono text-zinc-400 pl-0.5 hidden xl:inline">
+                {redoCount}
+              </span>
+            )}
+          </button>
+        </div>
+
         <button
           type="button"
           onClick={onOpenReaperExport}

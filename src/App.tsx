@@ -25,6 +25,16 @@ import { VisualizerSection } from './components/VisualizerSection';
 import { VirtualKeyboard } from './components/VirtualKeyboard';
 import { ReaperExportModal } from './components/ReaperExportModal';
 
+// Deep clone helper for immutable state snapshots in undo/redo stack
+function cloneSynthState(state: SynthState): SynthState {
+  if (typeof structuredClone === 'function') {
+    return structuredClone(state);
+  }
+  return JSON.parse(JSON.stringify(state));
+}
+
+const MAX_UNDO_HISTORY = 10;
+
 export default function App() {
   const [synthState, setSynthState] = useState<SynthState>(INITIAL_SYNTH_STATE);
   const [currentPreset, setCurrentPreset] = useState<Preset>(PRESET_LIBRARY[0]);
@@ -34,6 +44,23 @@ export default function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
+
+  // Undo/Redo State Stack (tracks last 10 changes to synthState)
+  const [undoStack, setUndoStack] = useState<SynthState[]>([]);
+  const [redoStack, setRedoStack] = useState<SynthState[]>([]);
+  const [hasPendingChange, setHasPendingChange] = useState(false);
+  const [historyFeedback, setHistoryFeedback] = useState<string | null>(null);
+
+  const synthStateRef = useRef<SynthState>(synthState);
+  useEffect(() => {
+    synthStateRef.current = synthState;
+  }, [synthState]);
+
+  const baselineStateRef = useRef<SynthState | null>(null);
+  const pendingStateRef = useRef<SynthState | null>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isUndoRedoingRef = useRef(false);
+  const feedbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const [hostState, setHostState] = useState<ReaperHostState>({
     tempo: 120,
@@ -163,20 +190,196 @@ export default function App() {
     }
   };
 
-  // State update helpers
-  const updateSynth = useCallback((partial: Partial<SynthState>) => {
-    setSynthState((prev) => {
-      const updated = { ...prev, ...partial };
-      engineRef.current?.updateState(updated);
-      return updated;
-    });
+  // Feedback toast helper
+  const showFeedback = useCallback((msg: string) => {
+    if (feedbackTimeoutRef.current) {
+      clearTimeout(feedbackTimeoutRef.current);
+    }
+    setHistoryFeedback(msg);
+    feedbackTimeoutRef.current = setTimeout(() => {
+      setHistoryFeedback(null);
+    }, 2000);
   }, []);
 
+  // Records a parameter change into the undo history stack with a 300ms gesture debounce
+  const recordChange = useCallback((prevState: SynthState, nextState: SynthState) => {
+    if (isUndoRedoingRef.current) return;
+
+    if (!debounceTimerRef.current) {
+      // First adjustment of a user interaction sequence
+      baselineStateRef.current = cloneSynthState(prevState);
+      setRedoStack([]);
+      setHasPendingChange(true);
+    } else {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    pendingStateRef.current = cloneSynthState(nextState);
+
+    debounceTimerRef.current = setTimeout(() => {
+      if (baselineStateRef.current) {
+        const snapshot = baselineStateRef.current;
+        setUndoStack((prev) => [...prev, snapshot].slice(-MAX_UNDO_HISTORY));
+        baselineStateRef.current = null;
+        pendingStateRef.current = null;
+      }
+      setHasPendingChange(false);
+      debounceTimerRef.current = null;
+    }, 300);
+  }, []);
+
+  // Undo the last parameter change (up to 10 changes tracked)
+  const handleUndo = useCallback(() => {
+    // If a parameter change gesture is active inside the debounce window
+    if (debounceTimerRef.current && baselineStateRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+
+      const revertTo = baselineStateRef.current;
+      const currentVal = pendingStateRef.current ?? cloneSynthState(synthStateRef.current);
+      baselineStateRef.current = null;
+      pendingStateRef.current = null;
+      setHasPendingChange(false);
+
+      setRedoStack((prev) => [...prev, currentVal].slice(-MAX_UNDO_HISTORY));
+
+      isUndoRedoingRef.current = true;
+      synthStateRef.current = revertTo;
+      setSynthState(revertTo);
+      engineRef.current?.updateState(revertTo);
+      showFeedback(`Undo: Reverted adjustment (${undoStack.length} left)`);
+
+      setTimeout(() => {
+        isUndoRedoingRef.current = false;
+      }, 50);
+      return;
+    }
+
+    if (undoStack.length === 0) return;
+
+    setUndoStack((prevUndo) => {
+      if (prevUndo.length === 0) return prevUndo;
+
+      const newUndo = [...prevUndo];
+      const previousState = newUndo.pop()!;
+
+      // Push current state onto redoStack
+      const currentState = cloneSynthState(synthStateRef.current);
+      setRedoStack((prevRedo) => [...prevRedo, currentState].slice(-MAX_UNDO_HISTORY));
+
+      isUndoRedoingRef.current = true;
+      synthStateRef.current = previousState;
+      setSynthState(previousState);
+      engineRef.current?.updateState(previousState);
+      showFeedback(`Undo: Reverted adjustment (${newUndo.length} left)`);
+
+      setTimeout(() => {
+        isUndoRedoingRef.current = false;
+      }, 50);
+
+      return newUndo;
+    });
+  }, [undoStack.length, showFeedback]);
+
+  // Redo the reverted parameter change
+  const handleRedo = useCallback(() => {
+    if (redoStack.length === 0) return;
+
+    // Flush any pending debounce first
+    if (debounceTimerRef.current && baselineStateRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+      const snapshot = baselineStateRef.current;
+      setUndoStack((prev) => [...prev, snapshot].slice(-MAX_UNDO_HISTORY));
+      baselineStateRef.current = null;
+      pendingStateRef.current = null;
+      setHasPendingChange(false);
+    }
+
+    setRedoStack((prevRedo) => {
+      if (prevRedo.length === 0) return prevRedo;
+
+      const newRedo = [...prevRedo];
+      const nextState = newRedo.pop()!;
+
+      // Push current state onto undoStack
+      const currentState = cloneSynthState(synthStateRef.current);
+      setUndoStack((prevUndo) => [...prevUndo, currentState].slice(-MAX_UNDO_HISTORY));
+
+      isUndoRedoingRef.current = true;
+      synthStateRef.current = nextState;
+      setSynthState(nextState);
+      engineRef.current?.updateState(nextState);
+      showFeedback(`Redo: Restored adjustment (${newRedo.length} left)`);
+
+      setTimeout(() => {
+        isUndoRedoingRef.current = false;
+      }, 50);
+
+      return newRedo;
+    });
+  }, [redoStack.length, showFeedback]);
+
+  // State update helpers
+  const updateSynth = useCallback(
+    (partial: Partial<SynthState>) => {
+      const prev = synthStateRef.current;
+      const updated = { ...prev, ...partial };
+      recordChange(prev, updated);
+      synthStateRef.current = updated;
+      setSynthState(updated);
+      engineRef.current?.updateState(updated);
+    },
+    [recordChange]
+  );
+
   const handlePresetSelect = (preset: Preset) => {
+    if (debounceTimerRef.current && baselineStateRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+      baselineStateRef.current = null;
+      pendingStateRef.current = null;
+      setHasPendingChange(false);
+    }
+
+    // Save current patch state to undo stack before loading new preset
+    setUndoStack((prev) => [...prev, cloneSynthState(synthStateRef.current)].slice(-MAX_UNDO_HISTORY));
+    setRedoStack([]);
+    showFeedback(`Preset: "${preset.name}" (Undoable)`);
+
     setCurrentPreset(preset);
+    synthStateRef.current = preset.state;
     setSynthState(preset.state);
     engineRef.current?.updateState(preset.state);
   };
+
+  // Keyboard shortcut listener for Ctrl+Z / Cmd+Z (Undo) and Ctrl+Y / Cmd+Shift+Z (Redo)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+        if (e.key === 'z' && !e.shiftKey) {
+          e.preventDefault();
+          handleUndo();
+        } else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
+          e.preventDefault();
+          handleRedo();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo, handleRedo]);
 
   const handleMacroChange = (index: 0 | 1 | 2 | 3, val: number) => {
     const updatedMacros: [number, number, number, number] = [
@@ -316,6 +519,12 @@ export default function App() {
         }
         onOpenReaperExport={() => setIsExportModalOpen(true)}
         onStartAudio={handleStartAudio}
+        canUndo={undoStack.length > 0 || hasPendingChange}
+        canRedo={redoStack.length > 0}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        undoCount={undoStack.length + (hasPendingChange ? 1 : 0)}
+        redoCount={redoStack.length}
       />
 
       {/* Main Synthesizer Workspace */}
@@ -468,6 +677,14 @@ export default function App() {
           handlePresetSelect(preset);
         }}
       />
+
+      {/* Undo/Redo Floating State Feedback */}
+      {historyFeedback && (
+        <div className="fixed bottom-3 right-4 z-50 bg-zinc-900/95 border border-cyan-500/40 text-cyan-300 px-3 py-1.5 rounded shadow-2xl text-xs font-mono flex items-center space-x-2 pointer-events-none transition-all">
+          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+          <span>{historyFeedback}</span>
+        </div>
+      )}
     </div>
   );
 }
