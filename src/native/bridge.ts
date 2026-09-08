@@ -3,14 +3,8 @@ import { getNativeFunction } from '@juce-framework/webview';
 import type { LiveModValues } from '../audio/engine';
 import type { ReaperHostState } from '../types/synth';
 
-declare global {
-  interface Window {
-    __JUCE__?: unknown;
-  }
-}
-
 export const isNativePluginHost = (): boolean =>
-  typeof window !== 'undefined' && Boolean(window.__JUCE__);
+  typeof window !== 'undefined' && typeof window.__JUCE__ !== 'undefined';
 
 async function callNative<T>(name: string, ...args: unknown[]): Promise<T | null> {
   if (!isNativePluginHost()) return null;
