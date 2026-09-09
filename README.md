@@ -249,6 +249,11 @@ Release builds embed the production Vite bundle through JUCE `BinaryData`; the V
 
 After building, copy the generated `AetherWave.vst3` bundle into a VST3 location scanned by REAPER, then rescan plugins.
 
+For CI downloads, unzip the GitHub artifact, verify `SHA256SUMS`, then extract
+`AetherWave-linux-x86_64.tar.gz`. Copy the **whole** `AetherWave.vst3` directory
+into `~/.vst3/`; a loose `.so` or `Contents/` directory is not an installed bundle.
+See [Linux installation, runtime dependencies and REAPER acceptance checks](docs/REAPER-Linux.md).
+
 The Linux CI artifact is produced at:
 
 ```text
@@ -326,7 +331,7 @@ cd VictorZynth
 ### Build the native plugin
 
 ```bash
-npm install --no-audit --no-fund
+npm ci --no-audit --no-fund
 
 cmake -S . -B build -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
@@ -350,7 +355,7 @@ build/VictorZynth_artefacts/Release/Standalone/AetherWave
 The original browser/Web Audio runtime remains useful for fast UI work:
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
@@ -381,6 +386,25 @@ plugin/WebUI/dist/
 ```
 
 ## Project structure
+
+Native CI uses SHA-pinned Actions, JUCE and pluginval source, plus the committed
+npm lockfile. It validates the Linux ELF, manifest, exports and runtime libraries;
+packages the bundle with permissions intact; tests MIDI-to-audio, layouts,
+sample rates, restart and state recall in a native VST3 host; then runs pluginval
+at strictness 5 including editor tests under Xvfb. Packages are uploaded only if
+all gates pass. This does not claim compatibility with older Linux ABIs or replace
+an actual REAPER playback/project-reopen test. Ubuntu packages and Node 22 patch
+versions still receive updates; this is dependency-locked, not a bit-for-bit build.
+
+Local regression tests (no audio hardware required):
+
+```bash
+node --import tsx --test tests/bridge.test.ts
+python3 -m unittest discover -s tests -p 'test_*.py' -v
+```
+
+To enable the native host smoke test, configure with `-DAETHERWAVE_BUILD_TESTS=ON`,
+build `AetherWaveSmoke`, and run `xvfb-run -a ctest --test-dir build --output-on-failure`.
 
 ```text
 VictorZynth/

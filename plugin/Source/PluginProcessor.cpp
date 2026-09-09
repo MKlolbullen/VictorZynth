@@ -76,6 +76,8 @@ float VictorZynthAudioProcessor::rawParameter(const char* id, float fallback) co
 
 void VictorZynthAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
+    // Hosts may prepare again without destroying the instance, even at the same rate.
+    synthesiser.allNotesOff(0, false);
     currentSampleRate.store(sampleRate, std::memory_order_relaxed);
     currentBlockSize.store(samplesPerBlock, std::memory_order_relaxed);
     monoFrequencyMemory.store(0.0, std::memory_order_relaxed);
@@ -90,6 +92,7 @@ void VictorZynthAudioProcessor::prepareToPlay(double sampleRate, int samplesPerB
 
 void VictorZynthAudioProcessor::releaseResources()
 {
+    synthesiser.allNotesOff(0, false);
     masteringChain.reset();
     effectsChain.reset();
     modulationEngine.reset();
@@ -137,6 +140,11 @@ void VictorZynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 {
     juce::ScopedNoDenormals noDenormals;
     const auto numSamples = buffer.getNumSamples();
+
+    // MIDI collector/DSP paths expect a positive block length. Hosts may send
+    // empty blocks while changing transport or processing configuration.
+    if (numSamples == 0)
+        return;
 
     juce::MidiBuffer uiMessages;
     uiMidiCollector.removeNextBlockOfMessages(uiMessages, numSamples);
@@ -195,7 +203,9 @@ void VictorZynthAudioProcessor::setStateInformation(const void* data, int sizeIn
 
 void VictorZynthAudioProcessor::queueMidiMessage(const juce::MidiMessage& message)
 {
-    uiMidiCollector.addMessageToQueue(message);
+    auto timestamped = message;
+    timestamped.setTimeStamp(juce::Time::getMillisecondCounterHiRes() * 0.001);
+    uiMidiCollector.addMessageToQueue(timestamped);
 }
 
 void VictorZynthAudioProcessor::setModMatrixJson(const juce::String& json)
