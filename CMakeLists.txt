@@ -1,12 +1,13 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(VictorZynth VERSION 0.1.0 LANGUAGES C CXX)
+project(VictorZynth VERSION 0.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(AETHERWAVE_WEB_DEV_SERVER "Load the React UI from http://localhost:3000 instead of embedded resources" OFF)
+option(AETHERWAVE_BUILD_WEB_UI "Build the React UI during CMake configure for embedding in the plugin" ON)
 
 include(FetchContent)
 FetchContent_Declare(
@@ -16,6 +17,46 @@ FetchContent_Declare(
     GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(JUCE)
+
+set(AETHERWAVE_WEB_DIST "${CMAKE_CURRENT_SOURCE_DIR}/plugin/WebUI/dist")
+set(AETHERWAVE_WEB_INDEX "${AETHERWAVE_WEB_DIST}/index.html")
+set(AETHERWAVE_WEB_JS "${AETHERWAVE_WEB_DIST}/assets/app.js")
+set(AETHERWAVE_WEB_CSS "${AETHERWAVE_WEB_DIST}/assets/style.css")
+
+if(AETHERWAVE_BUILD_WEB_UI)
+    find_program(NPM_EXECUTABLE npm REQUIRED)
+
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/node_modules/.bin/vite")
+        message(STATUS "Installing frontend dependencies for embedded AetherWave UI")
+        execute_process(
+            COMMAND "${NPM_EXECUTABLE}" install --no-audit --no-fund
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            COMMAND_ERROR_IS_FATAL ANY
+        )
+    endif()
+
+    message(STATUS "Building embedded AetherWave React UI")
+    execute_process(
+        COMMAND "${NPM_EXECUTABLE}" run build -- --mode plugin
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        COMMAND_ERROR_IS_FATAL ANY
+    )
+endif()
+
+foreach(asset IN ITEMS "${AETHERWAVE_WEB_INDEX}" "${AETHERWAVE_WEB_JS}" "${AETHERWAVE_WEB_CSS}")
+    if(NOT EXISTS "${asset}")
+        message(FATAL_ERROR "Missing embedded UI asset: ${asset}. Run 'npm run build -- --mode plugin' or enable AETHERWAVE_BUILD_WEB_UI.")
+    endif()
+endforeach()
+
+juce_add_binary_data(AetherWaveWebAssets
+    HEADER_NAME AetherWaveWebAssets.h
+    NAMESPACE AetherWaveWebAssets
+    SOURCES
+        "${AETHERWAVE_WEB_INDEX}"
+        "${AETHERWAVE_WEB_JS}"
+        "${AETHERWAVE_WEB_CSS}"
+)
 
 juce_add_plugin(VictorZynth
     COMPANY_NAME "VictorZynth"
@@ -63,6 +104,7 @@ target_compile_definitions(VictorZynth
 
 target_link_libraries(VictorZynth
     PRIVATE
+        AetherWaveWebAssets
         juce::juce_audio_utils
         juce::juce_dsp
         juce::juce_gui_extra
