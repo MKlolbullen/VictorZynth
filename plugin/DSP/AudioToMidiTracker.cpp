@@ -83,19 +83,15 @@ void AudioToMidiTracker::process(const juce::AudioBuffer<float>& buffer,
     {
         if (activeNote >= 0)
             closeActiveNote(0, generatedMidi);
-        gateOpen.store(false, std::memory_order_relaxed);
-        detectedFrequency.store(0.0f, std::memory_order_relaxed);
-        detectedConfidence.store(0.0f, std::memory_order_relaxed);
-        detectedMidiNote.store(-1, std::memory_order_relaxed);
+        reset();
         return;
     }
 
     if (inputChannels <= 0)
     {
-        ++silenceFrames;
-        if (activeNote >= 0 && silenceFrames >= juce::jmax(2, settings.smoothingFrames))
+        if (activeNote >= 0)
             closeActiveNote(0, generatedMidi);
-        gateOpen.store(false, std::memory_order_relaxed);
+        reset();
         return;
     }
 
