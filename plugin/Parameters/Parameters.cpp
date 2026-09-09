@@ -166,6 +166,35 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     addChoice(layout, polyphony, "Polyphony", polyphonyModes, 0);
     addBool(layout, droneMode, "Drone Mode", false);
 
+    // MyVST3-derived Studio mastering chain. Off by default for backwards-compatible patches.
+    addBool(layout, studioEnabled, "Studio Mastering Enabled", false);
+    addFloat(layout, studioInputGainDb, "Studio Input Gain", { -24.0f, 24.0f, 0.1f }, 0.0f);
+    addFloat(layout, studioOutputGainDb, "Studio Output Gain", { -24.0f, 24.0f, 0.1f }, 0.0f);
+
+    addBool(layout, studioEqEnabled, "Studio EQ Enabled", true);
+    addFloat(layout, studioHpfFreq, "Studio HPF", logarithmicRange(20.0f, 1000.0f, 120.0f), 20.0f);
+    addFloat(layout, studioLowShelfFreq, "Studio Low Shelf Freq", logarithmicRange(40.0f, 500.0f, 150.0f), 120.0f);
+    addFloat(layout, studioLowShelfGainDb, "Studio Low Shelf Gain", { -15.0f, 15.0f, 0.1f }, 0.0f);
+    addFloat(layout, studioPeak1Freq, "Studio Peak 1 Freq", logarithmicRange(100.0f, 2000.0f, 500.0f), 500.0f);
+    addFloat(layout, studioPeak1GainDb, "Studio Peak 1 Gain", { -15.0f, 15.0f, 0.1f }, 0.0f);
+    addFloat(layout, studioPeak1Q, "Studio Peak 1 Q", logarithmicRange(0.3f, 8.0f, 1.0f), 0.9f);
+    addFloat(layout, studioPeak2Freq, "Studio Peak 2 Freq", logarithmicRange(500.0f, 12000.0f, 3000.0f), 3000.0f);
+    addFloat(layout, studioPeak2GainDb, "Studio Peak 2 Gain", { -15.0f, 15.0f, 0.1f }, 0.0f);
+    addFloat(layout, studioPeak2Q, "Studio Peak 2 Q", logarithmicRange(0.3f, 8.0f, 1.0f), 0.9f);
+    addFloat(layout, studioHighShelfFreq, "Studio High Shelf Freq", logarithmicRange(1500.0f, 16000.0f, 8000.0f), 8000.0f);
+    addFloat(layout, studioHighShelfGainDb, "Studio High Shelf Gain", { -15.0f, 15.0f, 0.1f }, 0.0f);
+
+    addBool(layout, studioCompEnabled, "Studio Compressor Enabled", true);
+    addFloat(layout, studioCompThresholdDb, "Studio Compressor Threshold", { -60.0f, 0.0f, 0.1f }, -18.0f);
+    addFloat(layout, studioCompRatio, "Studio Compressor Ratio", logarithmicRange(1.0f, 20.0f, 4.0f), 3.0f);
+    addFloat(layout, studioCompAttackMs, "Studio Compressor Attack", logarithmicRange(0.1f, 100.0f, 10.0f), 10.0f);
+    addFloat(layout, studioCompReleaseMs, "Studio Compressor Release", logarithmicRange(10.0f, 1000.0f, 150.0f), 150.0f);
+    addFloat(layout, studioCompMakeupDb, "Studio Compressor Makeup", { 0.0f, 24.0f, 0.1f }, 0.0f);
+
+    addBool(layout, studioLimiterEnabled, "Studio Limiter Enabled", true);
+    addFloat(layout, studioLimiterCeilingDb, "Studio Limiter Ceiling", { -20.0f, 0.0f, 0.1f }, -1.0f);
+    addFloat(layout, studioLimiterReleaseMs, "Studio Limiter Release", logarithmicRange(1.0f, 500.0f, 100.0f), 100.0f);
+
     return layout;
 }
 }

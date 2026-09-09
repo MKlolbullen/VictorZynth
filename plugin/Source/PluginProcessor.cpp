@@ -4,11 +4,24 @@
 
 #include <cmath>
 
+namespace
+{
+juce::var makeObject(std::initializer_list<std::pair<juce::Identifier, juce::var>> fields)
+{
+    auto* object = new juce::DynamicObject();
+    for (const auto& [name, value] : fields)
+        object->setProperty(name, value);
+    return juce::var(object);
+}
+}
+
 VictorZynthAudioProcessor::VictorZynthAudioProcessor()
     : AudioProcessor(BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       state(*this, nullptr, "AETHERWAVE_STATE", aetherwave::parameters::createParameterLayout()),
       modulationEngine(state),
-      effectsChain(state, modulationEngine)
+      effectsChain(state, modulationEngine),
+      masteringChain(state),
+      midiGenerationState(std::make_shared<MidiGenerationSharedState>())
 {
     synthesiser.addSound(new aetherwave::dsp::WavetableSound());
 
@@ -22,6 +35,28 @@ VictorZynthAudioProcessor::VictorZynthAudioProcessor()
         state.state.setProperty(aetherwave::parameters::uiStateProperty, "{}", nullptr);
 
     modulationEngine.setModMatrixJson(state.state.getProperty(aetherwave::parameters::modMatrixProperty).toString());
+
+    juce::PropertiesFile::Options options;
+    options.applicationName = "VictorZynth";
+    options.filenameSuffix = ".settings";
+    options.folderName = "VictorZynth";
+    options.osxLibrarySubFolder = "Application Support/VictorZynth";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    options.millisecondsBeforeSaving = 1000;
+
+    const auto settingsDirectory = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+        .getChildFile("VictorZynth");
+    settingsDirectory.createDirectory();
+    aiSettings = std::make_unique<juce::PropertiesFile>(
+        settingsDirectory.getChildFile("VictorZynth.settings"), options);
+
+    const juce::ScopedLock lock(midiGenerationState->lock);
+    midiGenerationState->result = makeObject({
+        { "success", false },
+        { "message", "Idle" },
+        { "tempoBpm", 120.0 },
+        { "path", "" }
+    });
 }
 
 float VictorZynthAudioProcessor::rawParameter(const char* id, float fallback) const noexcept
@@ -40,10 +75,12 @@ void VictorZynthAudioProcessor::prepareToPlay(double sampleRate, int samplesPerB
     uiMidiCollector.reset(sampleRate);
     modulationEngine.prepare(sampleRate);
     effectsChain.prepare(sampleRate, samplesPerBlock, getTotalNumOutputChannels());
+    masteringChain.prepare(sampleRate, samplesPerBlock, getTotalNumOutputChannels());
 }
 
 void VictorZynthAudioProcessor::releaseResources()
 {
+    masteringChain.reset();
     effectsChain.reset();
     modulationEngine.reset();
     uiMidiCollector.reset(currentSampleRate.load(std::memory_order_relaxed));
@@ -94,6 +131,7 @@ void VictorZynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     buffer.clear();
     synthesiser.renderNextBlock(buffer, performanceMidi, 0, buffer.getNumSamples());
     effectsChain.process(buffer);
+    masteringChain.process(buffer);
 }
 
 juce::AudioProcessorEditor* VictorZynthAudioProcessor::createEditor()
@@ -150,6 +188,11 @@ juce::var VictorZynthAudioProcessor::getTelemetry() const
     return modulationEngine.getTelemetry(getActiveVoiceCount());
 }
 
+juce::var VictorZynthAudioProcessor::getStudioTelemetry()
+{
+    return masteringChain.getTelemetry();
+}
+
 juce::var VictorZynthAudioProcessor::getHostInfo() const
 {
     auto* result = new juce::DynamicObject();
@@ -187,6 +230,237 @@ void VictorZynthAudioProcessor::updateHostInfo()
             }
         }
     }
+}
+
+juce::File VictorZynthAudioProcessor::getMidiLibraryDirectory()
+{
+    auto directory = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+        .getChildFile("VictorZynth-MIDI");
+    directory.createDirectory();
+    return directory;
+}
+
+juce::var VictorZynthAudioProcessor::generationResultToVar(
+    const aetherwave::ai::MidiGenerator::Result& result,
+    const juce::File& savedFile)
+{
+    auto* object = new juce::DynamicObject();
+    object->setProperty("success", result.success);
+    object->setProperty("message", result.message);
+    object->setProperty("tempoBpm", result.tempoBpm);
+    object->setProperty("path", savedFile.getFullPathName());
+
+    juce::Array<juce::var> notePreview;
+    const auto noteLimit = juce::jmin<std::size_t>(result.notes.size(), 200);
+    for (std::size_t i = 0; i < noteLimit; ++i)
+    {
+        const auto& note = result.notes[i];
+        notePreview.add(makeObject({
+            { "pitch", note.pitch },
+            { "startBeats", note.startBeats },
+            { "lengthBeats", note.lengthBeats },
+            { "velocity", note.velocity }
+        }));
+    }
+    object->setProperty("notes", juce::var(notePreview));
+
+    juce::Array<juce::var> trackPreview;
+    for (const auto& track : result.tracks)
+    {
+        juce::Array<juce::var> notes;
+        const auto limit = juce::jmin<std::size_t>(track.notes.size(), 120);
+        for (std::size_t i = 0; i < limit; ++i)
+        {
+            const auto& note = track.notes[i];
+            notes.add(makeObject({
+                { "pitch", note.pitch },
+                { "startBeats", note.startBeats },
+                { "lengthBeats", note.lengthBeats },
+                { "velocity", note.velocity }
+            }));
+        }
+
+        trackPreview.add(makeObject({
+            { "name", track.name },
+            { "instrument", track.instrument },
+            { "gmProgram", track.gmProgram },
+            { "isDrums", track.isDrums },
+            { "notes", juce::var(notes) }
+        }));
+    }
+    object->setProperty("tracks", juce::var(trackPreview));
+
+    return juce::var(object);
+}
+
+void VictorZynthAudioProcessor::setAISettings(const juce::var& settings)
+{
+    if (aiSettings == nullptr)
+        return;
+
+    aiSettings->setValue("useAnthropic", bool(settings.getProperty("useAnthropic", true)));
+    aiSettings->setValue("endpoint", settings.getProperty("endpoint", "").toString());
+    aiSettings->setValue("model", settings.getProperty("model", "").toString());
+
+    const auto apiKey = settings.getProperty("apiKey", "").toString();
+    if (apiKey.isNotEmpty())
+        aiSettings->setValue("apiKey", apiKey);
+
+    aiSettings->saveIfNeeded();
+}
+
+juce::var VictorZynthAudioProcessor::getAISettings() const
+{
+    auto* object = new juce::DynamicObject();
+    if (aiSettings == nullptr)
+    {
+        object->setProperty("useAnthropic", true);
+        object->setProperty("endpoint", "https://api.anthropic.com/v1/messages");
+        object->setProperty("model", "claude-opus-4-8");
+        object->setProperty("apiKey", "");
+        return juce::var(object);
+    }
+
+    const auto useAnthropic = aiSettings->getBoolValue("useAnthropic", true);
+    object->setProperty("useAnthropic", useAnthropic);
+    object->setProperty("endpoint", aiSettings->getValue(
+        "endpoint", useAnthropic ? "https://api.anthropic.com/v1/messages" : ""));
+    object->setProperty("model", aiSettings->getValue(
+        "model", useAnthropic ? "claude-opus-4-8" : ""));
+    object->setProperty("apiKey", aiSettings->getValue("apiKey", ""));
+    return juce::var(object);
+}
+
+bool VictorZynthAudioProcessor::startMidiGeneration(const juce::var& requestVar)
+{
+    if (midiGenerationState == nullptr || midiGenerationState->busy.exchange(true))
+        return false;
+
+    aetherwave::ai::MidiGenerator::Request request;
+    request.useAnthropic = bool(requestVar.getProperty("useAnthropic", true));
+    request.multiTrack = bool(requestVar.getProperty("multiTrack", false));
+    request.endpoint = requestVar.getProperty("endpoint", "").toString().trim();
+    request.model = requestVar.getProperty("model", "").toString().trim();
+    request.apiKey = requestVar.getProperty("apiKey", "").toString().trim();
+    request.prompt = requestVar.getProperty("prompt", "").toString().trim();
+
+    if (request.endpoint.isEmpty())
+        request.endpoint = request.useAnthropic ? "https://api.anthropic.com/v1/messages" : juce::String();
+    if (request.model.isEmpty() && request.useAnthropic)
+        request.model = "claude-opus-4-8";
+    if (request.apiKey.isEmpty() && aiSettings != nullptr)
+        request.apiKey = aiSettings->getValue("apiKey", "");
+
+    if (request.prompt.isEmpty() || request.endpoint.isEmpty() || request.model.isEmpty() || request.apiKey.isEmpty())
+    {
+        const juce::ScopedLock lock(midiGenerationState->lock);
+        midiGenerationState->result = makeObject({
+            { "success", false },
+            { "message", "Prompt, endpoint, model and API key are required." },
+            { "tempoBpm", 0.0 },
+            { "path", "" }
+        });
+        midiGenerationState->busy.store(false);
+        return false;
+    }
+
+    setAISettings(requestVar);
+
+    {
+        const juce::ScopedLock lock(midiGenerationState->lock);
+        midiGenerationState->result = makeObject({
+            { "success", false },
+            { "message", request.multiTrack ? "Generating arrangement..." : "Generating MIDI..." },
+            { "tempoBpm", 0.0 },
+            { "path", "" }
+        });
+    }
+
+    const auto weakState = std::weak_ptr<MidiGenerationSharedState>(midiGenerationState);
+    const auto library = getMidiLibraryDirectory();
+    midiGenerator.generate(std::move(request), [weakState, library](aetherwave::ai::MidiGenerator::Result result) mutable
+    {
+        juce::File savedFile;
+        if (result.success)
+        {
+            const auto prefix = result.tracks.empty() ? "VictorZynth-" : "VictorZynth-arrangement-";
+            const auto baseName = prefix + juce::String(juce::Time::currentTimeMillis());
+            savedFile = library.getNonexistentChildFile(baseName, ".mid", false);
+
+            const auto wrote = result.tracks.empty()
+                ? aetherwave::ai::MidiGenerator::writeMidiFile(
+                    result.notes, result.tempoBpm, 0.0f, juce::Time::currentTimeMillis(), savedFile)
+                : aetherwave::ai::MidiGenerator::writeMultiTrackFile(result.tracks, result.tempoBpm, savedFile);
+
+            if (! wrote)
+            {
+                result.success = false;
+                result.message = "The MIDI was generated, but the file could not be written.";
+                savedFile = {};
+            }
+        }
+
+        if (const auto shared = weakState.lock())
+        {
+            const juce::ScopedLock lock(shared->lock);
+            shared->result = VictorZynthAudioProcessor::generationResultToVar(result, savedFile);
+            shared->busy.store(false);
+        }
+    });
+
+    return true;
+}
+
+juce::var VictorZynthAudioProcessor::getMidiGeneratorState() const
+{
+    auto* object = new juce::DynamicObject();
+    if (midiGenerationState == nullptr)
+    {
+        object->setProperty("busy", false);
+        object->setProperty("result", juce::var());
+        return juce::var(object);
+    }
+
+    object->setProperty("busy", midiGenerationState->busy.load());
+    const juce::ScopedLock lock(midiGenerationState->lock);
+    object->setProperty("result", midiGenerationState->result);
+    return juce::var(object);
+}
+
+juce::var VictorZynthAudioProcessor::listMidiLibrary() const
+{
+    const auto directory = getMidiLibraryDirectory();
+    auto files = directory.findChildFiles(juce::File::findFiles, false, "*.mid");
+
+    struct RecentFirst
+    {
+        static int compareElements(const juce::File& a, const juce::File& b)
+        {
+            const auto at = a.getLastModificationTime().toMilliseconds();
+            const auto bt = b.getLastModificationTime().toMilliseconds();
+            return at == bt ? a.getFileName().compareNatural(b.getFileName()) : (at > bt ? -1 : 1);
+        }
+    } comparator;
+    files.sort(comparator);
+
+    juce::Array<juce::var> result;
+    const auto limit = juce::jmin(64, files.size());
+    for (int i = 0; i < limit; ++i)
+    {
+        const auto& file = files.getReference(i);
+        result.add(makeObject({
+            { "name", file.getFileName() },
+            { "path", file.getFullPathName() },
+            { "size", static_cast<double>(file.getSize()) },
+            { "modifiedMs", static_cast<double>(file.getLastModificationTime().toMilliseconds()) }
+        }));
+    }
+    return juce::var(result);
+}
+
+void VictorZynthAudioProcessor::revealMidiLibrary() const
+{
+    getMidiLibraryDirectory().startAsProcess();
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(VictorZynth VERSION 0.2.0 LANGUAGES C CXX)
+project(VictorZynth VERSION 0.3.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -69,6 +69,7 @@ juce_add_plugin(VictorZynth
     COPY_PLUGIN_AFTER_BUILD FALSE
     NEEDS_WEB_BROWSER TRUE
     NEEDS_WEBVIEW2 TRUE
+    NEEDS_CURL TRUE
     PLUGIN_MANUFACTURER_CODE Vzyn
     PLUGIN_CODE Aewa
     FORMATS VST3 Standalone
@@ -93,13 +94,20 @@ target_sources(VictorZynth
         plugin/DSP/ModulationEngine.h
         plugin/DSP/EffectsChain.cpp
         plugin/DSP/EffectsChain.h
+        plugin/DSP/GRCompressor.h
+        plugin/DSP/LoudnessMeter.h
+        plugin/DSP/SpectrumSource.h
+        plugin/DSP/MasteringChain.cpp
+        plugin/DSP/MasteringChain.h
+        plugin/AI/MidiGenerator.cpp
+        plugin/AI/MidiGenerator.h
 )
 
 target_include_directories(VictorZynth PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/plugin)
 
 target_compile_definitions(VictorZynth
     PUBLIC
-        JUCE_USE_CURL=0
+        JUCE_USE_CURL=1
         JUCE_VST3_CAN_REPLACE_VST2=0
     PRIVATE
         AETHERWAVE_WEB_DEV_SERVER=$<BOOL:${AETHERWAVE_WEB_DEV_SERVER}>
