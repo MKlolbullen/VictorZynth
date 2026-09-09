@@ -156,9 +156,40 @@ VictorZynthAudioProcessorEditor::makeBrowserOptions(VictorZynthAudioProcessor& p
         {
             complete(processor.getTelemetry());
         })
+        .withNativeFunction("getStudioTelemetry", [&processor](const auto&, auto complete)
+        {
+            complete(processor.getStudioTelemetry());
+        })
         .withNativeFunction("getHostInfo", [&processor](const auto&, auto complete)
         {
             complete(processor.getHostInfo());
+        })
+        .withNativeFunction("getAISettings", [&processor](const auto&, auto complete)
+        {
+            complete(processor.getAISettings());
+        })
+        .withNativeFunction("setAISettings", [&processor](const auto& args, auto complete)
+        {
+            if (! args.isEmpty())
+                processor.setAISettings(args[0]);
+            complete(true);
+        })
+        .withNativeFunction("startMidiGeneration", [&processor](const auto& args, auto complete)
+        {
+            complete(! args.isEmpty() && processor.startMidiGeneration(args[0]));
+        })
+        .withNativeFunction("getMidiGeneratorState", [&processor](const auto&, auto complete)
+        {
+            complete(processor.getMidiGeneratorState());
+        })
+        .withNativeFunction("listMidiLibrary", [&processor](const auto&, auto complete)
+        {
+            complete(processor.listMidiLibrary());
+        })
+        .withNativeFunction("revealMidiLibrary", [&processor](const auto&, auto complete)
+        {
+            processor.revealMidiLibrary();
+            complete(true);
         })
         .withResourceProvider([](const auto& url)
         {

@@ -104,6 +104,35 @@ inline constexpr auto glide = "glide";
 inline constexpr auto polyphony = "polyphony";
 inline constexpr auto droneMode = "droneMode";
 
+// MyVST3-derived production/mastering layer. Disabled by default so old patches remain sonically stable.
+inline constexpr auto studioEnabled = "studio.enabled";
+inline constexpr auto studioInputGainDb = "studio.inputGainDb";
+inline constexpr auto studioOutputGainDb = "studio.outputGainDb";
+
+inline constexpr auto studioEqEnabled = "studio.eq.enabled";
+inline constexpr auto studioHpfFreq = "studio.eq.hpfFreq";
+inline constexpr auto studioLowShelfFreq = "studio.eq.lowShelfFreq";
+inline constexpr auto studioLowShelfGainDb = "studio.eq.lowShelfGainDb";
+inline constexpr auto studioPeak1Freq = "studio.eq.peak1Freq";
+inline constexpr auto studioPeak1GainDb = "studio.eq.peak1GainDb";
+inline constexpr auto studioPeak1Q = "studio.eq.peak1Q";
+inline constexpr auto studioPeak2Freq = "studio.eq.peak2Freq";
+inline constexpr auto studioPeak2GainDb = "studio.eq.peak2GainDb";
+inline constexpr auto studioPeak2Q = "studio.eq.peak2Q";
+inline constexpr auto studioHighShelfFreq = "studio.eq.highShelfFreq";
+inline constexpr auto studioHighShelfGainDb = "studio.eq.highShelfGainDb";
+
+inline constexpr auto studioCompEnabled = "studio.comp.enabled";
+inline constexpr auto studioCompThresholdDb = "studio.comp.thresholdDb";
+inline constexpr auto studioCompRatio = "studio.comp.ratio";
+inline constexpr auto studioCompAttackMs = "studio.comp.attackMs";
+inline constexpr auto studioCompReleaseMs = "studio.comp.releaseMs";
+inline constexpr auto studioCompMakeupDb = "studio.comp.makeupDb";
+
+inline constexpr auto studioLimiterEnabled = "studio.limiter.enabled";
+inline constexpr auto studioLimiterCeilingDb = "studio.limiter.ceilingDb";
+inline constexpr auto studioLimiterReleaseMs = "studio.limiter.releaseMs";
+
 inline constexpr auto modMatrixProperty = "modMatrixJson";
 inline constexpr auto uiStateProperty = "uiStateJson";
 

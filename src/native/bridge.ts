@@ -3,6 +3,57 @@ import { getNativeFunction } from '@juce-framework/webview';
 import type { LiveModValues } from '../audio/engine';
 import type { ReaperHostState } from '../types/synth';
 
+export interface StudioTelemetry {
+  inLevelDb: number;
+  outLevelDb: number;
+  gainReductionDb: number;
+  lufs: number;
+  spectrumDb: number[];
+}
+
+export interface NativeAISettings {
+  useAnthropic: boolean;
+  endpoint: string;
+  model: string;
+  apiKey: string;
+}
+
+export interface NativeGeneratedNote {
+  pitch: number;
+  startBeats: number;
+  lengthBeats: number;
+  velocity: number;
+}
+
+export interface NativeGeneratedTrack {
+  name: string;
+  instrument: string;
+  gmProgram: number;
+  isDrums: boolean;
+  notes: NativeGeneratedNote[];
+}
+
+export interface NativeMidiGeneratorResult {
+  success: boolean;
+  message: string;
+  tempoBpm: number;
+  path: string;
+  notes?: NativeGeneratedNote[];
+  tracks?: NativeGeneratedTrack[];
+}
+
+export interface NativeMidiGeneratorState {
+  busy: boolean;
+  result: NativeMidiGeneratorResult | null;
+}
+
+export interface NativeMidiLibraryItem {
+  name: string;
+  path: string;
+  size: number;
+  modifiedMs: number;
+}
+
 export const isNativePluginHost = (): boolean =>
   typeof window !== 'undefined' && typeof window.__JUCE__ !== 'undefined';
 
@@ -91,6 +142,37 @@ export async function getNativeTelemetry(): Promise<LiveModValues | null> {
   return await callNative<LiveModValues>('getTelemetry');
 }
 
+export async function getNativeStudioTelemetry(): Promise<StudioTelemetry | null> {
+  return await callNative<StudioTelemetry>('getStudioTelemetry');
+}
+
 export async function getNativeHostInfo(): Promise<Partial<ReaperHostState> | null> {
   return await callNative<Partial<ReaperHostState>>('getHostInfo');
+}
+
+export async function getNativeAISettings(): Promise<NativeAISettings | null> {
+  return await callNative<NativeAISettings>('getAISettings');
+}
+
+export async function setNativeAISettings(settings: NativeAISettings): Promise<void> {
+  await callNative('setAISettings', settings);
+}
+
+export async function startNativeMidiGeneration(request: NativeAISettings & {
+  prompt: string;
+  multiTrack: boolean;
+}): Promise<boolean> {
+  return Boolean(await callNative<boolean>('startMidiGeneration', request));
+}
+
+export async function getNativeMidiGeneratorState(): Promise<NativeMidiGeneratorState | null> {
+  return await callNative<NativeMidiGeneratorState>('getMidiGeneratorState');
+}
+
+export async function listNativeMidiLibrary(): Promise<NativeMidiLibraryItem[]> {
+  return (await callNative<NativeMidiLibraryItem[]>('listMidiLibrary')) ?? [];
+}
+
+export async function revealNativeMidiLibrary(): Promise<void> {
+  await callNative('revealMidiLibrary');
 }

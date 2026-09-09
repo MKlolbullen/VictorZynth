@@ -3,7 +3,9 @@ name: Native VST3 CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches:
+      - main
+      - 'codex/**'
 
 jobs:
   linux-vst3:
@@ -46,7 +48,8 @@ jobs:
             libxrender-dev \
             libwebkit2gtk-4.1-dev \
             libglu1-mesa-dev \
-            mesa-common-dev
+            mesa-common-dev \
+            libcurl4-openssl-dev
 
       - name: Configure
         run: >-

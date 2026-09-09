@@ -1,12 +1,18 @@
 #pragma once
 
+#include "../AI/MidiGenerator.h"
+#include "../DSP/EffectsChain.h"
+#include "../DSP/MasteringChain.h"
+#include "../DSP/ModulationEngine.h"
 #include "../DSP/WavetableBank.h"
 #include "../Parameters/Parameters.h"
 
 #include <atomic>
+#include <memory>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_data_structures/juce_data_structures.h>
 
 class VictorZynthAudioProcessor final : public juce::AudioProcessor
 {
@@ -44,17 +50,44 @@ public:
     void setModMatrixJson(const juce::String& json);
     void setAuxStateJson(const juce::String& json);
     juce::var getTelemetry() const;
+    juce::var getStudioTelemetry();
     juce::var getHostInfo() const;
 
+    bool startMidiGeneration(const juce::var& request);
+    juce::var getMidiGeneratorState() const;
+    juce::var getAISettings() const;
+    void setAISettings(const juce::var& settings);
+    juce::var listMidiLibrary() const;
+    void revealMidiLibrary() const;
+
 private:
+    struct MidiGenerationSharedState
+    {
+        mutable juce::CriticalSection lock;
+        juce::var result;
+        std::atomic<bool> busy { false };
+    };
+
     void updateHostInfo();
-    void captureMidiTelemetry(const juce::MidiBuffer& midiMessages);
+    juce::MidiBuffer preparePerformanceMidi(const juce::MidiBuffer& input);
     int getActiveVoiceCount() const;
+    float rawParameter(const char* id, float fallback = 0.0f) const noexcept;
+    static juce::File getMidiLibraryDirectory();
+    static juce::var generationResultToVar(const aetherwave::ai::MidiGenerator::Result& result,
+                                           const juce::File& savedFile);
 
     aetherwave::dsp::WavetableBank wavetableBank;
     juce::AudioProcessorValueTreeState state;
+    aetherwave::dsp::ModulationEngine modulationEngine;
+    aetherwave::dsp::EffectsChain effectsChain;
+    aetherwave::dsp::MasteringChain masteringChain;
+    std::atomic<double> monoFrequencyMemory { 0.0 };
     juce::Synthesiser synthesiser;
     juce::MidiMessageCollector uiMidiCollector;
+
+    aetherwave::ai::MidiGenerator midiGenerator;
+    std::shared_ptr<MidiGenerationSharedState> midiGenerationState;
+    std::unique_ptr<juce::PropertiesFile> aiSettings;
 
     std::atomic<double> currentSampleRate { 48000.0 };
     std::atomic<int> currentBlockSize { 0 };
@@ -62,9 +95,6 @@ private:
     std::atomic<bool> hostPlaying { false };
     std::atomic<int> hostTimeSigNumerator { 4 };
     std::atomic<int> hostTimeSigDenominator { 4 };
-    std::atomic<float> latestVelocity { 0.0f };
-    std::atomic<float> latestModWheel { 0.0f };
-    std::atomic<float> latestPitchBend { 0.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VictorZynthAudioProcessor)
 };
