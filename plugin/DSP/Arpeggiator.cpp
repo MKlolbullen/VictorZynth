@@ -5,6 +5,12 @@
 
 namespace aetherwave::dsp
 {
+namespace
+{
+constexpr double infiniteTimer = 1.0e18;
+constexpr double timerEpsilon = 1.0e-9;
+}
+
 void Arpeggiator::prepare(double newSampleRate)
 {
     sampleRate = juce::jmax(8000.0, newSampleRate);
@@ -22,8 +28,9 @@ void Arpeggiator::reset()
     sequenceIndex = 0;
     currentNote = -1;
     samplesUntilNextStep = 0.0;
-    samplesUntilGateOff = 1.0e18;
+    samplesUntilGateOff = infiniteTimer;
     swingLongStep = false;
+    lastLatch = false;
     lastMode = -1;
     lastOctaves = -1;
     telemetryCurrentNote.store(-1, std::memory_order_relaxed);
@@ -35,6 +42,19 @@ void Arpeggiator::clearHeldNotes()
 {
     heldNotes.fill(false);
     heldNoteCount.store(0, std::memory_order_relaxed);
+}
+
+void Arpeggiator::reconcileHeldNotesWithPhysical()
+{
+    int count = 0;
+    for (int note = 0; note < 128; ++note)
+    {
+        const auto down = physicalNotes[static_cast<std::size_t>(note)];
+        heldNotes[static_cast<std::size_t>(note)] = down;
+        if (down)
+            ++count;
+    }
+    heldNoteCount.store(count, std::memory_order_relaxed);
 }
 
 void Arpeggiator::process(const juce::MidiBuffer& input,
@@ -55,125 +75,38 @@ void Arpeggiator::process(const juce::MidiBuffer& input,
         sequenceLength = 0;
         sequenceIndex = 0;
         samplesUntilNextStep = 0.0;
-        samplesUntilGateOff = 1.0e18;
+        samplesUntilGateOff = infiniteTimer;
+        lastLatch = settings.latch;
         telemetrySequenceLength.store(0, std::memory_order_relaxed);
         return;
     }
 
-    bool sequenceDirty = settings.mode != lastMode || settings.octaves != lastOctaves;
-    lastMode = settings.mode;
-    lastOctaves = settings.octaves;
+    const auto maxSamplePosition = juce::jmax(0, numSamples - 1);
+    double cursor = 0.0;
 
-    for (const auto metadata : input)
+    auto emitDueAt = [&](int samplePosition)
     {
-        const auto message = metadata.getMessage();
-        const auto position = juce::jlimit(0, juce::jmax(0, numSamples - 1), metadata.samplePosition);
-
-        if (message.isNoteOn())
-        {
-            const auto note = juce::jlimit(0, 127, message.getNoteNumber());
-
-            if (settings.latch)
-            {
-                const auto anyPhysical = std::any_of(physicalNotes.begin(), physicalNotes.end(), [](bool down) { return down; });
-                if (! anyPhysical)
-                    clearHeldNotes();
-            }
-
-            physicalNotes[static_cast<std::size_t>(note)] = true;
-            heldNotes[static_cast<std::size_t>(note)] = true;
-            noteVelocities[static_cast<std::size_t>(note)] = message.getFloatVelocity();
-            sequenceDirty = true;
-            continue;
-        }
-
-        if (message.isNoteOff())
-        {
-            const auto note = juce::jlimit(0, 127, message.getNoteNumber());
-            physicalNotes[static_cast<std::size_t>(note)] = false;
-            if (! settings.latch)
-            {
-                heldNotes[static_cast<std::size_t>(note)] = false;
-                sequenceDirty = true;
-            }
-            continue;
-        }
-
-        if (message.isController())
-        {
-            const auto controller = message.getControllerNumber();
-            if (controller == 120 || controller == 123)
-            {
-                clearHeldNotes();
-                physicalNotes.fill(false);
-                sequenceDirty = true;
-            }
-        }
-
-        output.addEvent(message, position);
-    }
-
-    if (sequenceDirty)
-    {
-        rebuildSequence(settings);
-        if (settings.retrigger)
-        {
-            stopCurrentNote(0, output);
-            sequenceIndex = 0;
-            samplesUntilNextStep = 0.0;
-            samplesUntilGateOff = 1.0e18;
-            swingLongStep = false;
-        }
-    }
-
-    if (sequenceLength <= 0)
-    {
-        stopCurrentNote(0, output);
-        samplesUntilNextStep = 0.0;
-        samplesUntilGateOff = 1.0e18;
-        return;
-    }
-
-    auto cursor = 0.0;
-    const auto blockLength = static_cast<double>(numSamples);
-
-    while (cursor < blockLength)
-    {
-        const auto nextEvent = juce::jmin(samplesUntilNextStep, samplesUntilGateOff);
-        if (nextEvent >= 1.0e17)
-            break;
-
-        if (cursor + nextEvent >= blockLength)
-        {
-            const auto remaining = blockLength - cursor;
-            samplesUntilNextStep = juce::jmax(0.0, samplesUntilNextStep - remaining);
-            if (samplesUntilGateOff < 1.0e17)
-                samplesUntilGateOff = juce::jmax(0.0, samplesUntilGateOff - remaining);
-            cursor = blockLength;
-            break;
-        }
-
-        cursor += nextEvent;
-        samplesUntilNextStep = juce::jmax(0.0, samplesUntilNextStep - nextEvent);
-        if (samplesUntilGateOff < 1.0e17)
-            samplesUntilGateOff = juce::jmax(0.0, samplesUntilGateOff - nextEvent);
-
-        const auto samplePosition = juce::jlimit(0, juce::jmax(0, numSamples - 1),
-                                                 static_cast<int>(std::floor(cursor)));
-
-        if (samplesUntilGateOff <= 1.0e-9)
+        if (samplesUntilGateOff <= timerEpsilon)
         {
             stopCurrentNote(samplePosition, output);
-            samplesUntilGateOff = 1.0e18;
+            samplesUntilGateOff = infiniteTimer;
         }
 
-        if (samplesUntilNextStep <= 1.0e-9)
+        if (samplesUntilNextStep <= timerEpsilon)
         {
+            if (sequenceLength <= 0)
+            {
+                samplesUntilNextStep = infiniteTimer;
+                return;
+            }
+
             stopCurrentNote(samplePosition, output);
 
             const auto index = juce::jlimit(0, sequenceLength - 1, sequenceIndex);
             const auto note = sequence[static_cast<std::size_t>(index)];
-            const auto velocity = juce::jlimit(0.05f, 1.0f, sequenceVelocities[static_cast<std::size_t>(index)]);
+            const auto velocity = juce::jlimit(0.05f, 1.0f,
+                sequenceVelocities[static_cast<std::size_t>(index)]);
+
             output.addEvent(juce::MidiMessage::noteOn(1, note, velocity), samplePosition);
             currentNote = note;
             telemetryCurrentNote.store(note, std::memory_order_relaxed);
@@ -182,9 +115,159 @@ void Arpeggiator::process(const juce::MidiBuffer& input,
             sequenceIndex = (sequenceIndex + 1) % sequenceLength;
             const auto stepSamples = nextStepSamples(tempoBpm, settings);
             samplesUntilNextStep = stepSamples;
-            samplesUntilGateOff = juce::jmax(1.0, stepSamples * juce::jlimit(0.05f, 1.0f, settings.gate));
+            samplesUntilGateOff = juce::jmax(1.0,
+                stepSamples * juce::jlimit(0.05f, 1.0f, settings.gate));
         }
+    };
+
+    // Advance generated timing only up to (not beyond) an input MIDI event. If an
+    // arp event lands exactly on the same sample, the incoming event is applied first,
+    // then the due arp event is emitted from the updated note set.
+    auto advanceTo = [&](double target)
+    {
+        while (cursor < target)
+        {
+            const auto remaining = target - cursor;
+            const auto nextEvent = juce::jmin(samplesUntilNextStep, samplesUntilGateOff);
+
+            if (nextEvent >= infiniteTimer * 0.5)
+            {
+                cursor = target;
+                break;
+            }
+
+            if (nextEvent >= remaining - timerEpsilon)
+            {
+                if (samplesUntilNextStep < infiniteTimer * 0.5)
+                    samplesUntilNextStep = juce::jmax(0.0, samplesUntilNextStep - remaining);
+                if (samplesUntilGateOff < infiniteTimer * 0.5)
+                    samplesUntilGateOff = juce::jmax(0.0, samplesUntilGateOff - remaining);
+                cursor = target;
+                break;
+            }
+
+            cursor += nextEvent;
+            if (samplesUntilNextStep < infiniteTimer * 0.5)
+                samplesUntilNextStep = juce::jmax(0.0, samplesUntilNextStep - nextEvent);
+            if (samplesUntilGateOff < infiniteTimer * 0.5)
+                samplesUntilGateOff = juce::jmax(0.0, samplesUntilGateOff - nextEvent);
+
+            emitDueAt(juce::jlimit(0, maxSamplePosition,
+                static_cast<int>(std::floor(cursor))));
+        }
+    };
+
+    auto rebuildAt = [&](int samplePosition, bool retriggerNow)
+    {
+        const auto previousLength = sequenceLength;
+        rebuildSequence(settings);
+
+        if (sequenceLength <= 0)
+        {
+            stopCurrentNote(samplePosition, output);
+            sequenceIndex = 0;
+            samplesUntilNextStep = infiniteTimer;
+            samplesUntilGateOff = infiniteTimer;
+            return;
+        }
+
+        if (retriggerNow || previousLength <= 0)
+        {
+            stopCurrentNote(samplePosition, output);
+            sequenceIndex = 0;
+            samplesUntilNextStep = 0.0;
+            samplesUntilGateOff = infiniteTimer;
+            swingLongStep = false;
+            emitDueAt(samplePosition);
+        }
+        else
+        {
+            sequenceIndex %= sequenceLength;
+        }
+    };
+
+    bool settingsChanged = settings.mode != lastMode || settings.octaves != lastOctaves;
+
+    // A latched note-off was intentionally ignored while latch was on. When latch is
+    // switched off, reconcile against the keys that are physically still down so stale
+    // latched notes cannot live forever.
+    if (lastLatch && ! settings.latch)
+    {
+        reconcileHeldNotesWithPhysical();
+        settingsChanged = true;
     }
+
+    lastLatch = settings.latch;
+    lastMode = settings.mode;
+    lastOctaves = settings.octaves;
+
+    if (settingsChanged)
+        rebuildAt(0, settings.retrigger);
+
+    for (const auto metadata : input)
+    {
+        const auto message = metadata.getMessage();
+        const auto position = juce::jlimit(0, maxSamplePosition, metadata.samplePosition);
+
+        advanceTo(static_cast<double>(position));
+
+        bool noteSetChanged = false;
+
+        if (message.isNoteOn())
+        {
+            const auto note = juce::jlimit(0, 127, message.getNoteNumber());
+
+            if (settings.latch)
+            {
+                const auto anyPhysical = std::any_of(
+                    physicalNotes.begin(), physicalNotes.end(), [](bool down) { return down; });
+                if (! anyPhysical)
+                    clearHeldNotes();
+            }
+
+            physicalNotes[static_cast<std::size_t>(note)] = true;
+            heldNotes[static_cast<std::size_t>(note)] = true;
+            noteVelocities[static_cast<std::size_t>(note)] = message.getFloatVelocity();
+            noteSetChanged = true;
+        }
+        else if (message.isNoteOff())
+        {
+            const auto note = juce::jlimit(0, 127, message.getNoteNumber());
+            physicalNotes[static_cast<std::size_t>(note)] = false;
+            if (! settings.latch)
+            {
+                heldNotes[static_cast<std::size_t>(note)] = false;
+                noteSetChanged = true;
+            }
+        }
+        else
+        {
+            if (message.isController())
+            {
+                const auto controller = message.getControllerNumber();
+                if (controller == 120 || controller == 123)
+                {
+                    clearHeldNotes();
+                    physicalNotes.fill(false);
+                    noteSetChanged = true;
+                }
+            }
+
+            output.addEvent(message, position);
+        }
+
+        if (noteSetChanged)
+            rebuildAt(position, settings.retrigger);
+
+        // If a previously scheduled arp transition lands on this exact sample, it must
+        // happen after the triggering input event rather than at sample 0 or before it.
+        emitDueAt(position);
+    }
+
+    // Emit generated events strictly inside the remainder of this block. A transition
+    // exactly on the block boundary carries a zero timer into the next block and is
+    // emitted at sample 0 there, preserving sample-accurate continuity.
+    advanceTo(static_cast<double>(numSamples));
 }
 
 void Arpeggiator::rebuildSequence(const Settings& settings)
@@ -232,7 +315,8 @@ void Arpeggiator::rebuildSequence(const Settings& settings)
         for (int i = from; i != to && sequenceLength < static_cast<int>(sequence.size()); i += step)
         {
             sequence[static_cast<std::size_t>(sequenceLength)] = ascending[static_cast<std::size_t>(i)];
-            sequenceVelocities[static_cast<std::size_t>(sequenceLength)] = ascendingVelocities[static_cast<std::size_t>(i)];
+            sequenceVelocities[static_cast<std::size_t>(sequenceLength)] =
+                ascendingVelocities[static_cast<std::size_t>(i)];
             ++sequenceLength;
         }
     };
@@ -280,8 +364,9 @@ double Arpeggiator::nextStepSamples(double tempoBpm, const Settings& settings)
     if (swing <= 0.0001f)
         return base;
 
-    const auto multiplier = swingLongStep ? (1.0 + static_cast<double>(swing) * 0.5)
-                                          : (1.0 - static_cast<double>(swing) * 0.5);
+    const auto multiplier = swingLongStep
+        ? (1.0 + static_cast<double>(swing) * 0.5)
+        : (1.0 - static_cast<double>(swing) * 0.5);
     swingLongStep = ! swingLongStep;
     return juce::jmax(1.0, base * multiplier);
 }
