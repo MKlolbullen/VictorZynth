@@ -83,13 +83,19 @@ int main(int argc, char** argv)
             if (candidate->getName(128) == "Master Volume")
                 parameter = candidate;
         require(parameter != nullptr, "Master Volume parameter is missing");
+        plugin->setRateAndBufferSizeDetails(48000.0, 256);
+        plugin->prepareToPlay(48000.0, 256);
         parameter->setValueNotifyingHost(0.0f);
+        // A VST3 host delivers queued automation to the component during process.
+        render(*plugin, 256, false);
         juce::MemoryBlock saved;
         plugin->getStateInformation(saved);
         require(saved.getSize() > 0, "Empty saved state");
         parameter->setValueNotifyingHost(1.0f);
+        render(*plugin, 256, false);
         plugin->setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
         require(std::abs(parameter->getValue()) < 1.0e-5f, "Host parameter state did not restore");
+        plugin->releaseResources();
         std::cout << "PASS: VST3 discovery, instantiation, MIDI audio, finite samples, "
                      "input layouts, zero/variable blocks, restart, state restore\n";
         return 0;

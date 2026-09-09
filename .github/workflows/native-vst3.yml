@@ -17,7 +17,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: native-vst3-${{ github.workflow }}-${{ github.ref }}
+  # Manual rebuilds must not cancel the required push/PR check for the same ref.
+  group: native-vst3-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

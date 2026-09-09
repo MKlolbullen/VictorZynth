@@ -14,7 +14,7 @@ import {
   ModSource,
 } from './types/synth';
 import { INITIAL_SYNTH_STATE, PRESET_LIBRARY, getLocalUserPresets } from './audio/presets';
-import { SynthAudioEngine, LiveModValues } from './audio/engine';
+import { SynthAudioEngine, LiveModValues } from './audio/runtime';
 import { ReaperHostBar } from './components/ReaperHostBar';
 import { OscillatorSection } from './components/OscillatorSection';
 import { FilterSection } from './components/FilterSection';
@@ -119,6 +119,10 @@ export default function App() {
   useEffect(() => {
     const engine = new SynthAudioEngine(INITIAL_SYNTH_STATE);
     engineRef.current = engine;
+    engine.onStateFromHost = (state) => {
+      synthStateRef.current = state;
+      setSynthState(state);
+    };
 
     // Polling live modulation metrics to feed UI dials & patch cords
     const interval = setInterval(() => {

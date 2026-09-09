@@ -65,6 +65,14 @@ VictorZynthAudioProcessorEditor::makeBrowserOptions(VictorZynthAudioProcessor& p
         {
             complete(parameterSnapshot(processor));
         })
+        .withNativeFunction("getAuxiliaryState", [&processor](const auto&, auto complete)
+        {
+            const auto snapshot = processor.getValueTreeState().copyState();
+            auto* object = new juce::DynamicObject();
+            object->setProperty("modMatrixJson", snapshot.getProperty(aetherwave::parameters::modMatrixProperty, "[]"));
+            object->setProperty("uiStateJson", snapshot.getProperty(aetherwave::parameters::uiStateProperty, "{}"));
+            complete(juce::var(object));
+        })
         .withNativeFunction("setParameter", [&processor](const auto& args, auto complete)
         {
             if (args.size() < 2)

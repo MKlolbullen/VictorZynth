@@ -140,6 +140,10 @@ export async function getNativeParameterSnapshot(): Promise<Record<string, numbe
   return snapshot;
 }
 
+export async function getNativeAuxiliaryState(): Promise<{ modMatrixJson: string; uiStateJson: string } | null> {
+  return callNative('getAuxiliaryState');
+}
+
 export async function setNativeParameter(id: string, value: number): Promise<boolean> {
   return Boolean(await callNative<boolean>('setParameter', id, value));
 }

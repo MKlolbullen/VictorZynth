@@ -1,6 +1,7 @@
 import type { ReaperHostState, SynthState, WavetableId, WarpMode, FilterType, LFOShape } from '../types/synth';
 import {
   getNativeHostInfo,
+  getNativeAuxiliaryState,
   getNativeParameterSnapshot,
   getNativeTelemetry,
   isNativePluginHost,
@@ -41,7 +42,7 @@ function choiceIndex<T extends string>(choices: readonly T[], value: T): number 
   return index < 0 ? 0 : index;
 }
 
-function flattenState(state: SynthState): Record<string, number> {
+export function flattenState(state: SynthState): Record<string, number> {
   return {
     'osc1.table': choiceIndex(TABLES, state.osc1.tableId),
     'osc1.position': state.osc1.position,
@@ -143,6 +144,40 @@ function flattenState(state: SynthState): Record<string, number> {
   };
 }
 
+export function applyNativeParameters(base: SynthState, snapshot: Record<string, number>): SynthState {
+  const result = cloneState(base);
+  const choices: Record<string, readonly string[]> = {
+    'osc1.table': TABLES, 'osc2.table': TABLES,
+    'osc1.warpMode': WARPS, 'osc2.warpMode': WARPS,
+    'sub.waveform': ['sine', 'triangle', 'square'],
+    'noise.type': ['white', 'pink', 'cosmic'], 'filter.type': FILTERS,
+    'lfo1.shape': LFO_SHAPES, 'lfo2.shape': LFO_SHAPES,
+    'lfo1.syncDivision': SYNC_DIVISIONS, 'lfo2.syncDivision': SYNC_DIVISIONS,
+    polyphony: ['poly', 'mono', 'legato'],
+  };
+  // Iterate only our known IDs, never arbitrary object paths returned by a host.
+  for (const id of Object.keys(flattenState(base))) {
+    const value = snapshot[id];
+    if (!Number.isFinite(value)) continue;
+    let path = id;
+    if (id.startsWith('master.')) path = `effects.${id}`;
+    if (/^macro\.[1-4]$/.test(id)) path = `macros.${Number(id.split('.')[1]) - 1}`;
+    if (id === 'osc1.table' || id === 'osc2.table') path = `${id}Id`;
+    const parts = path.split('.');
+    const key = parts.pop()!;
+    let parent: any = result;
+    for (const part of parts) parent = parent[part];
+    const choice = choices[id];
+    if (choice) {
+      const index = Math.round(value);
+      if (index >= 0 && index < choice.length) parent[key] = choice[index];
+    } else {
+      parent[key] = typeof parent[key] === 'boolean' ? value >= 0.5 : value;
+    }
+  }
+  return result;
+}
+
 function emptyLiveModValues(): LiveModValues {
   return {
     sources: {
@@ -199,6 +234,10 @@ export class SynthAudioEngine {
   private lastModMatrixJson = '';
   private lastAuxJson = '';
   private latestParameterSnapshot: Record<string, number> | null = null;
+  private stateRevision = 0;
+  private polling = false;
+  private disposed = false;
+  public onStateFromHost: ((state: SynthState) => void) | null = null;
 
   public liveModValues: LiveModValues;
   public isRecording = false;
@@ -206,12 +245,13 @@ export class SynthAudioEngine {
 
   constructor(initialState: SynthState) {
     this.uiShadow = cloneState(initialState);
+    this.lastModMatrixJson = JSON.stringify(initialState.modMatrix);
+    this.lastAuxJson = JSON.stringify({ macroNames: initialState.macroNames, octave: initialState.octave });
     this.browser = this.native ? null : new BrowserSynthAudioEngine(initialState);
     this.liveModValues = this.browser ? this.browser.liveModValues : emptyLiveModValues();
 
     if (this.native) {
       this.startNativePolling();
-      void this.pushAuxiliaryState();
     }
   }
 
@@ -236,6 +276,7 @@ export class SynthAudioEngine {
     }
 
     const nextState = { ...this.uiShadow, ...cloneState(newState) } as SynthState;
+    ++this.stateRevision;
     const previous = flattenState(this.uiShadow);
     const next = flattenState(nextState);
     const changed = Object.keys(next).filter((id) => Math.abs((next[id] ?? 0) - (previous[id] ?? 0)) > 1.0e-6);
@@ -299,6 +340,7 @@ export class SynthAudioEngine {
     }
 
     const clamped = Math.max(0, Math.min(1, value));
+    ++this.stateRevision;
     this.uiShadow.macros[index] = clamped;
     void setNativeParameter(`macro.${index + 1}`, clamped);
   }
@@ -323,6 +365,7 @@ export class SynthAudioEngine {
   }
 
   public dispose(): void {
+    this.disposed = true;
     if (this.browser) {
       this.browser.dispose();
       return;
@@ -343,15 +386,40 @@ export class SynthAudioEngine {
     if (!this.native || this.telemetryTimer) return;
 
     const poll = async () => {
-      const [telemetry, hostInfo, parameterSnapshot] = await Promise.all([
-        getNativeTelemetry(),
-        getNativeHostInfo(),
-        getNativeParameterSnapshot(),
-      ]);
-
-      if (telemetry) this.liveModValues = telemetry;
-      if (hostInfo) this.nativeHostInfo = hostInfo;
-      if (parameterSnapshot) this.latestParameterSnapshot = parameterSnapshot;
+      if (this.polling || this.disposed) return;
+      this.polling = true;
+      const revision = this.stateRevision;
+      try {
+        const [telemetry, hostInfo, parameterSnapshot, auxiliary] = await Promise.all([
+          getNativeTelemetry(), getNativeHostInfo(), getNativeParameterSnapshot(), getNativeAuxiliaryState(),
+        ]);
+        if (this.disposed) return;
+        if (telemetry) this.liveModValues = telemetry;
+        if (hostInfo) this.nativeHostInfo = hostInfo;
+        if (parameterSnapshot) this.latestParameterSnapshot = parameterSnapshot;
+        // Do not overwrite a UI gesture made while this snapshot was in flight.
+        if (parameterSnapshot && revision === this.stateRevision) {
+          const next = applyNativeParameters(this.uiShadow, parameterSnapshot);
+          if (auxiliary) {
+            const matrix = JSON.parse(auxiliary.modMatrixJson || '[]');
+            const ui = JSON.parse(auxiliary.uiStateJson || '{}');
+            if (Array.isArray(matrix)) next.modMatrix = matrix;
+            if (Array.isArray(ui.macroNames) && ui.macroNames.length === 4
+                && ui.macroNames.every((name: unknown) => typeof name === 'string')) next.macroNames = ui.macroNames;
+            if (Number.isFinite(ui.octave)) next.octave = ui.octave;
+          }
+          this.lastModMatrixJson = JSON.stringify(next.modMatrix);
+          this.lastAuxJson = JSON.stringify({ macroNames: next.macroNames, octave: next.octave });
+          if (JSON.stringify(next) !== JSON.stringify(this.uiShadow)) {
+            this.uiShadow = next;
+            this.onStateFromHost?.(cloneState(next));
+          }
+        }
+      } catch (error) {
+        console.warn('Native state polling failed', error);
+      } finally {
+        this.polling = false;
+      }
     };
 
     void poll();
