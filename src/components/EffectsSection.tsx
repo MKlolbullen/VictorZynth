@@ -1,6 +1,7 @@
 import React from 'react';
 import { EffectsParams } from '../types/synth';
 import { Knob } from './Knob';
+import { PerformanceToolsSection } from './PerformanceToolsSection';
 import { StudioToolsSection } from './StudioToolsSection';
 import { Sparkles, Repeat, Radio, Gauge } from 'lucide-react';
 
@@ -272,6 +273,7 @@ export const EffectsSection: React.FC<EffectsSectionProps> = ({
         </div>
       </div>
 
+      <PerformanceToolsSection />
       <StudioToolsSection />
     </>
   );
