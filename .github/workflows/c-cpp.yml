@@ -1,0 +1,23 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  source-layout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify native CMake project layout
+        run: |
+          test -f CMakeLists.txt
+          test -f plugin/Source/PluginProcessor.cpp
+          test -f plugin/Source/PluginEditor.cpp
+          test -f plugin/DSP/WavetableVoice.cpp
+          test -f plugin/DSP/EffectsChain.cpp
+          test -f plugin/DSP/MasteringChain.cpp
+          test -f plugin/AI/MidiGenerator.cpp
+          echo "Native source layout OK. Full compilation is enforced by Native VST3 CI."

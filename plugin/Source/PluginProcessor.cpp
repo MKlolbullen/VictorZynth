@@ -216,9 +216,9 @@ juce::var VictorZynthAudioProcessor::getHostInfo() const
 
 void VictorZynthAudioProcessor::updateHostInfo()
 {
-    if (auto* playHead = getPlayHead())
+    if (auto* hostPlayHead = getPlayHead())
     {
-        if (const auto position = playHead->getPosition())
+        if (const auto position = hostPlayHead->getPosition())
         {
             hostPlaying.store(position->getIsPlaying(), std::memory_order_relaxed);
             if (const auto bpm = position->getBpm())
@@ -396,7 +396,7 @@ bool VictorZynthAudioProcessor::startMidiGeneration(const juce::var& requestVar)
             {
                 result.success = false;
                 result.message = "The MIDI was generated, but the file could not be written.";
-                savedFile = {};
+                savedFile = juce::File();
             }
         }
 
