@@ -36,6 +36,7 @@ public:
 
 private:
     void clearHeldNotes();
+    void reconcileHeldNotesWithPhysical();
     void rebuildSequence(const Settings& settings);
     double baseStepSamples(double tempoBpm, int rate) const noexcept;
     double nextStepSamples(double tempoBpm, const Settings& settings);
@@ -53,6 +54,7 @@ private:
     double samplesUntilNextStep = 0.0;
     double samplesUntilGateOff = 1.0e18;
     bool swingLongStep = false;
+    bool lastLatch = false;
     int lastMode = -1;
     int lastOctaves = -1;
 
