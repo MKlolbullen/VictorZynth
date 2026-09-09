@@ -149,7 +149,9 @@ void AudioToMidiTracker::analyseFrame(const Settings& settings,
     difference.fill(0.0f);
     cmnd.fill(1.0f);
 
-    for (int tau = minTau; tau <= maxTau; ++tau)
+    // YIN's cumulative-mean normalized difference depends on all lower lags,
+    // even when the final pitch search itself begins at minTau.
+    for (int tau = 1; tau <= maxTau; ++tau)
     {
         double sum = 0.0;
         for (int i = 0; i < comparisonLength; ++i)
