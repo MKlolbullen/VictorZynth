@@ -4,59 +4,77 @@
 
 #include <cmath>
 
-namespace
-{
-juce::var makeEmptyModulationObject()
-{
-    auto* sources = new juce::DynamicObject();
-    for (const auto* name : { "lfo1", "lfo2", "env1", "env2", "macro1", "macro2", "macro3", "macro4", "modWheel", "pitchBend", "velocity", "chaos" })
-        sources->setProperty(name, 0.0);
-
-    auto* destinations = new juce::DynamicObject();
-    for (const auto* name : { "osc1_pitch", "osc1_pos", "osc1_warp", "osc1_phase", "osc1_level",
-                              "osc2_pitch", "osc2_pos", "osc2_warp", "osc2_phase", "osc2_level",
-                              "filter_cutoff", "filter_res", "filter_drive", "reverb_mix", "delay_mix",
-                              "delay_time", "chorus_mix", "lfo1_rate", "lfo2_rate", "pan" })
-        destinations->setProperty(name, 0.0);
-
-    auto* result = new juce::DynamicObject();
-    result->setProperty("sources", juce::var(sources));
-    result->setProperty("destinations", juce::var(destinations));
-    return juce::var(result);
-}
-}
-
 VictorZynthAudioProcessor::VictorZynthAudioProcessor()
     : AudioProcessor(BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true)),
-      state(*this, nullptr, "AETHERWAVE_STATE", aetherwave::parameters::createParameterLayout())
+      state(*this, nullptr, "AETHERWAVE_STATE", aetherwave::parameters::createParameterLayout()),
+      modulationEngine(state),
+      effectsChain(state, modulationEngine)
 {
     synthesiser.addSound(new aetherwave::dsp::WavetableSound());
 
     for (int i = 0; i < 16; ++i)
-        synthesiser.addVoice(new aetherwave::dsp::WavetableVoice(wavetableBank, state));
+        synthesiser.addVoice(new aetherwave::dsp::WavetableVoice(
+            wavetableBank, state, modulationEngine, monoFrequencyMemory));
 
     if (! state.state.hasProperty(aetherwave::parameters::modMatrixProperty))
         state.state.setProperty(aetherwave::parameters::modMatrixProperty, "[]", nullptr);
     if (! state.state.hasProperty(aetherwave::parameters::uiStateProperty))
         state.state.setProperty(aetherwave::parameters::uiStateProperty, "{}", nullptr);
+
+    modulationEngine.setModMatrixJson(state.state.getProperty(aetherwave::parameters::modMatrixProperty).toString());
+}
+
+float VictorZynthAudioProcessor::rawParameter(const char* id, float fallback) const noexcept
+{
+    if (const auto* raw = state.getRawParameterValue(id))
+        return raw->load(std::memory_order_relaxed);
+    return fallback;
 }
 
 void VictorZynthAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     currentSampleRate.store(sampleRate, std::memory_order_relaxed);
     currentBlockSize.store(samplesPerBlock, std::memory_order_relaxed);
+    monoFrequencyMemory.store(0.0, std::memory_order_relaxed);
     synthesiser.setCurrentPlaybackSampleRate(sampleRate);
     uiMidiCollector.reset(sampleRate);
+    modulationEngine.prepare(sampleRate);
+    effectsChain.prepare(sampleRate, samplesPerBlock, getTotalNumOutputChannels());
 }
 
 void VictorZynthAudioProcessor::releaseResources()
 {
+    effectsChain.reset();
+    modulationEngine.reset();
     uiMidiCollector.reset(currentSampleRate.load(std::memory_order_relaxed));
 }
 
 bool VictorZynthAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
 {
     return layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo();
+}
+
+juce::MidiBuffer VictorZynthAudioProcessor::preparePerformanceMidi(const juce::MidiBuffer& input)
+{
+    juce::MidiBuffer output;
+    const auto mode = static_cast<int>(std::lround(rawParameter(aetherwave::parameters::polyphony)));
+    const auto drone = rawParameter(aetherwave::parameters::droneMode) >= 0.5f;
+
+    for (const auto metadata : input)
+    {
+        const auto message = metadata.getMessage();
+        const auto samplePosition = metadata.samplePosition;
+
+        if (drone && message.isNoteOff())
+            continue;
+
+        if (mode != 0 && message.isNoteOn())
+            output.addEvent(juce::MidiMessage::allNotesOff(message.getChannel()), samplePosition);
+
+        output.addEvent(message, samplePosition);
+    }
+
+    return output;
 }
 
 void VictorZynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
@@ -69,10 +87,13 @@ void VictorZynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     midiMessages.addEvents(uiMessages, 0, buffer.getNumSamples(), 0);
 
     updateHostInfo();
-    captureMidiTelemetry(midiMessages);
+    auto performanceMidi = preparePerformanceMidi(midiMessages);
+    modulationEngine.handleMidi(performanceMidi);
+    modulationEngine.processBlock(buffer.getNumSamples(), hostTempo.load(std::memory_order_relaxed));
 
     buffer.clear();
-    synthesiser.renderNextBlock(buffer, midiMessages, 0, buffer.getNumSamples());
+    synthesiser.renderNextBlock(buffer, performanceMidi, 0, buffer.getNumSamples());
+    effectsChain.process(buffer);
 }
 
 juce::AudioProcessorEditor* VictorZynthAudioProcessor::createEditor()
@@ -91,7 +112,11 @@ void VictorZynthAudioProcessor::setStateInformation(const void* data, int sizeIn
     if (const auto xml = getXmlFromBinary(data, sizeInBytes))
     {
         if (xml->hasTagName(state.state.getType()))
+        {
             state.replaceState(juce::ValueTree::fromXml(*xml));
+            modulationEngine.setModMatrixJson(
+                state.state.getProperty(aetherwave::parameters::modMatrixProperty, "[]").toString());
+        }
     }
 }
 
@@ -103,6 +128,7 @@ void VictorZynthAudioProcessor::queueMidiMessage(const juce::MidiMessage& messag
 void VictorZynthAudioProcessor::setModMatrixJson(const juce::String& json)
 {
     state.state.setProperty(aetherwave::parameters::modMatrixProperty, json, nullptr);
+    modulationEngine.setModMatrixJson(json);
 }
 
 void VictorZynthAudioProcessor::setAuxStateJson(const juce::String& json)
@@ -121,39 +147,7 @@ int VictorZynthAudioProcessor::getActiveVoiceCount() const
 
 juce::var VictorZynthAudioProcessor::getTelemetry() const
 {
-    auto telemetry = makeEmptyModulationObject();
-    auto* root = telemetry.getDynamicObject();
-    auto* sources = root != nullptr ? root->getProperty("sources").getDynamicObject() : nullptr;
-
-    if (sources != nullptr)
-    {
-        const auto raw = [this](const char* id) -> float
-        {
-            if (const auto* value = state.getRawParameterValue(id))
-                return value->load();
-            return 0.0f;
-        };
-
-        sources->setProperty("macro1", raw(aetherwave::parameters::macro1));
-        sources->setProperty("macro2", raw(aetherwave::parameters::macro2));
-        sources->setProperty("macro3", raw(aetherwave::parameters::macro3));
-        sources->setProperty("macro4", raw(aetherwave::parameters::macro4));
-        sources->setProperty("modWheel", latestModWheel.load(std::memory_order_relaxed));
-        sources->setProperty("pitchBend", latestPitchBend.load(std::memory_order_relaxed));
-        sources->setProperty("velocity", latestVelocity.load(std::memory_order_relaxed));
-    }
-
-    auto* envStages = new juce::DynamicObject();
-    const auto activeVoices = getActiveVoiceCount();
-    envStages->setProperty("env1", activeVoices > 0 ? "sustain" : "idle");
-    envStages->setProperty("env2", activeVoices > 0 ? "sustain" : "idle");
-    envStages->setProperty("env1Progress", activeVoices > 0 ? 1.0 : 0.0);
-    envStages->setProperty("env2Progress", activeVoices > 0 ? 1.0 : 0.0);
-    envStages->setProperty("activeNoteCount", activeVoices);
-    if (root != nullptr)
-        root->setProperty("envStages", juce::var(envStages));
-
-    return telemetry;
+    return modulationEngine.getTelemetry(getActiveVoiceCount());
 }
 
 juce::var VictorZynthAudioProcessor::getHostInfo() const
@@ -165,7 +159,7 @@ juce::var VictorZynthAudioProcessor::getHostInfo() const
     juce::Array<juce::var> signature;
     signature.add(hostTimeSigNumerator.load(std::memory_order_relaxed));
     signature.add(hostTimeSigDenominator.load(std::memory_order_relaxed));
-    result->setProperty("timeSignature", signature);
+    result->setProperty("timeSignature", juce::var(signature));
 
     result->setProperty("sampleRate", currentSampleRate.load(std::memory_order_relaxed));
     result->setProperty("bufferSize", currentBlockSize.load(std::memory_order_relaxed));
@@ -191,25 +185,6 @@ void VictorZynthAudioProcessor::updateHostInfo()
                 hostTimeSigNumerator.store(timeSignature->numerator, std::memory_order_relaxed);
                 hostTimeSigDenominator.store(timeSignature->denominator, std::memory_order_relaxed);
             }
-        }
-    }
-}
-
-void VictorZynthAudioProcessor::captureMidiTelemetry(const juce::MidiBuffer& midiMessages)
-{
-    for (const auto metadata : midiMessages)
-    {
-        const auto message = metadata.getMessage();
-        if (message.isNoteOn())
-            latestVelocity.store(message.getFloatVelocity(), std::memory_order_relaxed);
-        else if (message.isController() && message.getControllerNumber() == 1)
-            latestModWheel.store(static_cast<float>(message.getControllerValue()) / 127.0f, std::memory_order_relaxed);
-        else if (message.isPitchWheel())
-        {
-            constexpr float centre = 8192.0f;
-            const auto bend = juce::jlimit(-1.0f, 1.0f,
-                (static_cast<float>(message.getPitchWheelValue()) - centre) / centre);
-            latestPitchBend.store(bend, std::memory_order_relaxed);
         }
     }
 }

@@ -89,6 +89,10 @@ target_sources(VictorZynth
         plugin/DSP/WavetableBank.h
         plugin/DSP/WavetableVoice.cpp
         plugin/DSP/WavetableVoice.h
+        plugin/DSP/ModulationEngine.cpp
+        plugin/DSP/ModulationEngine.h
+        plugin/DSP/EffectsChain.cpp
+        plugin/DSP/EffectsChain.h
 )
 
 target_include_directories(VictorZynth PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/plugin)
