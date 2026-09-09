@@ -6,6 +6,8 @@
 
 namespace
 {
+constexpr auto performanceStateProperty = "performanceStateJson";
+
 juce::var makeObject(std::initializer_list<std::pair<juce::Identifier, juce::var>> fields)
 {
     auto* object = new juce::DynamicObject();
@@ -16,7 +18,9 @@ juce::var makeObject(std::initializer_list<std::pair<juce::Identifier, juce::var
 }
 
 VictorZynthAudioProcessor::VictorZynthAudioProcessor()
-    : AudioProcessor(BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true)),
+    : AudioProcessor(BusesProperties()
+          .withInput("Pitch Input", juce::AudioChannelSet::stereo(), true)
+          .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       state(*this, nullptr, "AETHERWAVE_STATE", aetherwave::parameters::createParameterLayout()),
       modulationEngine(state),
       effectsChain(state, modulationEngine),
@@ -33,6 +37,10 @@ VictorZynthAudioProcessor::VictorZynthAudioProcessor()
         state.state.setProperty(aetherwave::parameters::modMatrixProperty, "[]", nullptr);
     if (! state.state.hasProperty(aetherwave::parameters::uiStateProperty))
         state.state.setProperty(aetherwave::parameters::uiStateProperty, "{}", nullptr);
+    if (! state.state.hasProperty(performanceStateProperty))
+        state.state.setProperty(performanceStateProperty, juce::JSON::toString(getPerformanceSettings(), false), nullptr);
+    else
+        restorePerformanceSettingsFromState();
 
     modulationEngine.setModMatrixJson(state.state.getProperty(aetherwave::parameters::modMatrixProperty).toString());
 
@@ -76,6 +84,8 @@ void VictorZynthAudioProcessor::prepareToPlay(double sampleRate, int samplesPerB
     modulationEngine.prepare(sampleRate);
     effectsChain.prepare(sampleRate, samplesPerBlock, getTotalNumOutputChannels());
     masteringChain.prepare(sampleRate, samplesPerBlock, getTotalNumOutputChannels());
+    audioToMidiTracker.prepare(sampleRate);
+    arpeggiator.prepare(sampleRate);
 }
 
 void VictorZynthAudioProcessor::releaseResources()
@@ -83,12 +93,20 @@ void VictorZynthAudioProcessor::releaseResources()
     masteringChain.reset();
     effectsChain.reset();
     modulationEngine.reset();
+    audioToMidiTracker.reset();
+    arpeggiator.reset();
     uiMidiCollector.reset(currentSampleRate.load(std::memory_order_relaxed));
 }
 
 bool VictorZynthAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
 {
-    return layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo();
+    if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
+        return false;
+
+    const auto input = layouts.getMainInputChannelSet();
+    return input.isDisabled()
+        || input == juce::AudioChannelSet::mono()
+        || input == juce::AudioChannelSet::stereo();
 }
 
 juce::MidiBuffer VictorZynthAudioProcessor::preparePerformanceMidi(const juce::MidiBuffer& input)
@@ -118,18 +136,34 @@ void VictorZynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
                                              juce::MidiBuffer& midiMessages)
 {
     juce::ScopedNoDenormals noDenormals;
+    const auto numSamples = buffer.getNumSamples();
 
     juce::MidiBuffer uiMessages;
-    uiMidiCollector.removeNextBlockOfMessages(uiMessages, buffer.getNumSamples());
-    midiMessages.addEvents(uiMessages, 0, buffer.getNumSamples(), 0);
+    uiMidiCollector.removeNextBlockOfMessages(uiMessages, numSamples);
+    midiMessages.addEvents(uiMessages, 0, numSamples, 0);
 
     updateHostInfo();
-    auto performanceMidi = preparePerformanceMidi(midiMessages);
+
+    juce::MidiBuffer detectedMidi;
+    audioToMidiTracker.process(buffer, getTotalNumInputChannels(), detectedMidi, getPitchTrackingSettings());
+    midiMessages.addEvents(detectedMidi, 0, numSamples, 0);
+
+    juce::MidiBuffer sequencedMidi;
+    arpeggiator.process(midiMessages,
+                        sequencedMidi,
+                        numSamples,
+                        hostTempo.load(std::memory_order_relaxed),
+                        getArpeggiatorSettings());
+
+    midiMessages.clear();
+    midiMessages.addEvents(sequencedMidi, 0, numSamples, 0);
+
+    auto performanceMidi = preparePerformanceMidi(sequencedMidi);
     modulationEngine.handleMidi(performanceMidi);
-    modulationEngine.processBlock(buffer.getNumSamples(), hostTempo.load(std::memory_order_relaxed));
+    modulationEngine.processBlock(numSamples, hostTempo.load(std::memory_order_relaxed));
 
     buffer.clear();
-    synthesiser.renderNextBlock(buffer, performanceMidi, 0, buffer.getNumSamples());
+    synthesiser.renderNextBlock(buffer, performanceMidi, 0, numSamples);
     effectsChain.process(buffer);
     masteringChain.process(buffer);
 }
@@ -154,6 +188,7 @@ void VictorZynthAudioProcessor::setStateInformation(const void* data, int sizeIn
             state.replaceState(juce::ValueTree::fromXml(*xml));
             modulationEngine.setModMatrixJson(
                 state.state.getProperty(aetherwave::parameters::modMatrixProperty, "[]").toString());
+            restorePerformanceSettingsFromState();
         }
     }
 }
@@ -191,6 +226,119 @@ juce::var VictorZynthAudioProcessor::getTelemetry() const
 juce::var VictorZynthAudioProcessor::getStudioTelemetry()
 {
     return masteringChain.getTelemetry();
+}
+
+juce::var VictorZynthAudioProcessor::getPerformanceTelemetry() const
+{
+    auto* object = new juce::DynamicObject();
+    object->setProperty("pitch", audioToMidiTracker.getTelemetry());
+    object->setProperty("arp", arpeggiator.getTelemetry());
+    object->setProperty("inputChannels", getTotalNumInputChannels());
+    return juce::var(object);
+}
+
+juce::var VictorZynthAudioProcessor::getPerformanceSettings() const
+{
+    auto* pitch = new juce::DynamicObject();
+    pitch->setProperty("enabled", pitchEnabled.load(std::memory_order_relaxed));
+    pitch->setProperty("gateDb", pitchGateDb.load(std::memory_order_relaxed));
+    pitch->setProperty("minFrequency", pitchMinFrequency.load(std::memory_order_relaxed));
+    pitch->setProperty("maxFrequency", pitchMaxFrequency.load(std::memory_order_relaxed));
+    pitch->setProperty("confidence", pitchConfidence.load(std::memory_order_relaxed));
+    pitch->setProperty("smoothingFrames", pitchSmoothingFrames.load(std::memory_order_relaxed));
+    pitch->setProperty("velocitySensitivity", pitchVelocitySensitivity.load(std::memory_order_relaxed));
+    pitch->setProperty("scale", pitchScale.load(std::memory_order_relaxed));
+    pitch->setProperty("root", pitchRoot.load(std::memory_order_relaxed));
+    pitch->setProperty("retrigger", pitchRetrigger.load(std::memory_order_relaxed));
+
+    auto* arp = new juce::DynamicObject();
+    arp->setProperty("enabled", arpEnabled.load(std::memory_order_relaxed));
+    arp->setProperty("mode", arpMode.load(std::memory_order_relaxed));
+    arp->setProperty("rate", arpRate.load(std::memory_order_relaxed));
+    arp->setProperty("octaves", arpOctaves.load(std::memory_order_relaxed));
+    arp->setProperty("gate", arpGate.load(std::memory_order_relaxed));
+    arp->setProperty("latch", arpLatch.load(std::memory_order_relaxed));
+    arp->setProperty("swing", arpSwing.load(std::memory_order_relaxed));
+    arp->setProperty("retrigger", arpRetrigger.load(std::memory_order_relaxed));
+
+    auto* object = new juce::DynamicObject();
+    object->setProperty("pitch", juce::var(pitch));
+    object->setProperty("arp", juce::var(arp));
+    return juce::var(object);
+}
+
+void VictorZynthAudioProcessor::setPerformanceSettings(const juce::var& settings)
+{
+    const auto pitch = settings.getProperty("pitch", juce::var());
+    if (! pitch.isVoid())
+    {
+        pitchEnabled.store(bool(pitch.getProperty("enabled", pitchEnabled.load())), std::memory_order_relaxed);
+        pitchGateDb.store(juce::jlimit(-80.0f, -6.0f, static_cast<float>(static_cast<double>(pitch.getProperty("gateDb", pitchGateDb.load())))), std::memory_order_relaxed);
+        pitchMinFrequency.store(juce::jlimit(35.0f, 500.0f, static_cast<float>(static_cast<double>(pitch.getProperty("minFrequency", pitchMinFrequency.load())))), std::memory_order_relaxed);
+        pitchMaxFrequency.store(juce::jlimit(200.0f, 3000.0f, static_cast<float>(static_cast<double>(pitch.getProperty("maxFrequency", pitchMaxFrequency.load())))), std::memory_order_relaxed);
+        pitchConfidence.store(juce::jlimit(0.5f, 0.95f, static_cast<float>(static_cast<double>(pitch.getProperty("confidence", pitchConfidence.load())))), std::memory_order_relaxed);
+        pitchSmoothingFrames.store(juce::jlimit(1, 8, static_cast<int>(pitch.getProperty("smoothingFrames", pitchSmoothingFrames.load()))), std::memory_order_relaxed);
+        pitchVelocitySensitivity.store(juce::jlimit(0.0f, 1.0f, static_cast<float>(static_cast<double>(pitch.getProperty("velocitySensitivity", pitchVelocitySensitivity.load())))), std::memory_order_relaxed);
+        pitchScale.store(juce::jlimit(0, 2, static_cast<int>(pitch.getProperty("scale", pitchScale.load()))), std::memory_order_relaxed);
+        pitchRoot.store(juce::jlimit(0, 11, static_cast<int>(pitch.getProperty("root", pitchRoot.load()))), std::memory_order_relaxed);
+        pitchRetrigger.store(bool(pitch.getProperty("retrigger", pitchRetrigger.load())), std::memory_order_relaxed);
+    }
+
+    const auto arp = settings.getProperty("arp", juce::var());
+    if (! arp.isVoid())
+    {
+        arpEnabled.store(bool(arp.getProperty("enabled", arpEnabled.load())), std::memory_order_relaxed);
+        arpMode.store(juce::jlimit(0, 3, static_cast<int>(arp.getProperty("mode", arpMode.load()))), std::memory_order_relaxed);
+        arpRate.store(juce::jlimit(0, 3, static_cast<int>(arp.getProperty("rate", arpRate.load()))), std::memory_order_relaxed);
+        arpOctaves.store(juce::jlimit(1, 4, static_cast<int>(arp.getProperty("octaves", arpOctaves.load()))), std::memory_order_relaxed);
+        arpGate.store(juce::jlimit(0.05f, 1.0f, static_cast<float>(static_cast<double>(arp.getProperty("gate", arpGate.load())))), std::memory_order_relaxed);
+        arpLatch.store(bool(arp.getProperty("latch", arpLatch.load())), std::memory_order_relaxed);
+        arpSwing.store(juce::jlimit(0.0f, 0.75f, static_cast<float>(static_cast<double>(arp.getProperty("swing", arpSwing.load())))), std::memory_order_relaxed);
+        arpRetrigger.store(bool(arp.getProperty("retrigger", arpRetrigger.load())), std::memory_order_relaxed);
+    }
+
+    state.state.setProperty(performanceStateProperty, juce::JSON::toString(getPerformanceSettings(), false), nullptr);
+}
+
+aetherwave::dsp::AudioToMidiTracker::Settings VictorZynthAudioProcessor::getPitchTrackingSettings() const noexcept
+{
+    aetherwave::dsp::AudioToMidiTracker::Settings settings;
+    settings.enabled = pitchEnabled.load(std::memory_order_relaxed);
+    settings.gateDb = pitchGateDb.load(std::memory_order_relaxed);
+    settings.minFrequency = pitchMinFrequency.load(std::memory_order_relaxed);
+    settings.maxFrequency = pitchMaxFrequency.load(std::memory_order_relaxed);
+    settings.minConfidence = pitchConfidence.load(std::memory_order_relaxed);
+    settings.smoothingFrames = pitchSmoothingFrames.load(std::memory_order_relaxed);
+    settings.velocitySensitivity = pitchVelocitySensitivity.load(std::memory_order_relaxed);
+    settings.scale = pitchScale.load(std::memory_order_relaxed);
+    settings.root = pitchRoot.load(std::memory_order_relaxed);
+    settings.retriggerOnOnset = pitchRetrigger.load(std::memory_order_relaxed);
+    return settings;
+}
+
+aetherwave::dsp::Arpeggiator::Settings VictorZynthAudioProcessor::getArpeggiatorSettings() const noexcept
+{
+    aetherwave::dsp::Arpeggiator::Settings settings;
+    settings.enabled = arpEnabled.load(std::memory_order_relaxed);
+    settings.mode = arpMode.load(std::memory_order_relaxed);
+    settings.rate = arpRate.load(std::memory_order_relaxed);
+    settings.octaves = arpOctaves.load(std::memory_order_relaxed);
+    settings.gate = arpGate.load(std::memory_order_relaxed);
+    settings.latch = arpLatch.load(std::memory_order_relaxed);
+    settings.swing = arpSwing.load(std::memory_order_relaxed);
+    settings.retrigger = arpRetrigger.load(std::memory_order_relaxed);
+    return settings;
+}
+
+void VictorZynthAudioProcessor::restorePerformanceSettingsFromState()
+{
+    const auto json = state.state.getProperty(performanceStateProperty, "").toString();
+    if (json.isEmpty())
+        return;
+
+    const auto parsed = juce::JSON::parse(json);
+    if (! parsed.isVoid())
+        setPerformanceSettings(parsed);
 }
 
 juce::var VictorZynthAudioProcessor::getHostInfo() const

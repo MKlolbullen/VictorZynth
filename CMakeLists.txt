@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(VictorZynth VERSION 0.3.0 LANGUAGES C CXX)
+project(VictorZynth VERSION 0.4.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -63,7 +63,7 @@ juce_add_plugin(VictorZynth
     BUNDLE_ID "com.victorzynth.aetherwave"
     IS_SYNTH TRUE
     NEEDS_MIDI_INPUT TRUE
-    NEEDS_MIDI_OUTPUT FALSE
+    NEEDS_MIDI_OUTPUT TRUE
     IS_MIDI_EFFECT FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS TRUE
     COPY_PLUGIN_AFTER_BUILD FALSE
@@ -94,6 +94,10 @@ target_sources(VictorZynth
         plugin/DSP/ModulationEngine.h
         plugin/DSP/EffectsChain.cpp
         plugin/DSP/EffectsChain.h
+        plugin/DSP/AudioToMidiTracker.cpp
+        plugin/DSP/AudioToMidiTracker.h
+        plugin/DSP/Arpeggiator.cpp
+        plugin/DSP/Arpeggiator.h
         plugin/DSP/GRCompressor.h
         plugin/DSP/LoudnessMeter.h
         plugin/DSP/SpectrumSource.h

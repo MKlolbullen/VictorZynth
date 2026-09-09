@@ -160,6 +160,20 @@ VictorZynthAudioProcessorEditor::makeBrowserOptions(VictorZynthAudioProcessor& p
         {
             complete(processor.getStudioTelemetry());
         })
+        .withNativeFunction("getPerformanceTelemetry", [&processor](const auto&, auto complete)
+        {
+            complete(processor.getPerformanceTelemetry());
+        })
+        .withNativeFunction("getPerformanceSettings", [&processor](const auto&, auto complete)
+        {
+            complete(processor.getPerformanceSettings());
+        })
+        .withNativeFunction("setPerformanceSettings", [&processor](const auto& args, auto complete)
+        {
+            if (! args.isEmpty())
+                processor.setPerformanceSettings(args[0]);
+            complete(true);
+        })
         .withNativeFunction("getHostInfo", [&processor](const auto&, auto complete)
         {
             complete(processor.getHostInfo());

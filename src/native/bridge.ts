@@ -11,6 +11,59 @@ export interface StudioTelemetry {
   spectrumDb: number[];
 }
 
+export interface PitchTrackingSettings {
+  enabled: boolean;
+  gateDb: number;
+  minFrequency: number;
+  maxFrequency: number;
+  confidence: number;
+  smoothingFrames: number;
+  velocitySensitivity: number;
+  scale: number;
+  root: number;
+  retrigger: boolean;
+}
+
+export interface ArpeggiatorSettings {
+  enabled: boolean;
+  mode: number;
+  rate: number;
+  octaves: number;
+  gate: number;
+  latch: boolean;
+  swing: number;
+  retrigger: boolean;
+}
+
+export interface PerformanceSettings {
+  pitch: PitchTrackingSettings;
+  arp: ArpeggiatorSettings;
+}
+
+export interface PitchTrackingTelemetry {
+  inputDb: number;
+  frequencyHz: number;
+  confidence: number;
+  onset: number;
+  midiNote: number;
+  noteName: string;
+  gateOpen: boolean;
+  waveform: number[];
+}
+
+export interface ArpeggiatorTelemetry {
+  heldNotes: number;
+  currentNote: number;
+  step: number;
+  sequenceLength: number;
+}
+
+export interface PerformanceTelemetry {
+  pitch: PitchTrackingTelemetry;
+  arp: ArpeggiatorTelemetry;
+  inputChannels: number;
+}
+
 export interface NativeAISettings {
   useAnthropic: boolean;
   endpoint: string;
@@ -144,6 +197,18 @@ export async function getNativeTelemetry(): Promise<LiveModValues | null> {
 
 export async function getNativeStudioTelemetry(): Promise<StudioTelemetry | null> {
   return await callNative<StudioTelemetry>('getStudioTelemetry');
+}
+
+export async function getNativePerformanceTelemetry(): Promise<PerformanceTelemetry | null> {
+  return await callNative<PerformanceTelemetry>('getPerformanceTelemetry');
+}
+
+export async function getNativePerformanceSettings(): Promise<PerformanceSettings | null> {
+  return await callNative<PerformanceSettings>('getPerformanceSettings');
+}
+
+export async function setNativePerformanceSettings(settings: PerformanceSettings): Promise<void> {
+  await callNative('setPerformanceSettings', settings);
 }
 
 export async function getNativeHostInfo(): Promise<Partial<ReaperHostState> | null> {
