@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../AI/MidiGenerator.h"
+#include "../DSP/Arpeggiator.h"
+#include "../DSP/AudioToMidiTracker.h"
 #include "../DSP/EffectsChain.h"
 #include "../DSP/MasteringChain.h"
 #include "../DSP/ModulationEngine.h"
@@ -30,7 +32,7 @@ public:
 
     const juce::String getName() const override { return JucePlugin_Name; }
     bool acceptsMidi() const override { return true; }
-    bool producesMidi() const override { return false; }
+    bool producesMidi() const override { return true; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 15.0; }
 
@@ -51,6 +53,9 @@ public:
     void setAuxStateJson(const juce::String& json);
     juce::var getTelemetry() const;
     juce::var getStudioTelemetry();
+    juce::var getPerformanceTelemetry() const;
+    juce::var getPerformanceSettings() const;
+    void setPerformanceSettings(const juce::var& settings);
     juce::var getHostInfo() const;
 
     bool startMidiGeneration(const juce::var& request);
@@ -75,12 +80,17 @@ private:
     static juce::File getMidiLibraryDirectory();
     static juce::var generationResultToVar(const aetherwave::ai::MidiGenerator::Result& result,
                                            const juce::File& savedFile);
+    aetherwave::dsp::AudioToMidiTracker::Settings getPitchTrackingSettings() const noexcept;
+    aetherwave::dsp::Arpeggiator::Settings getArpeggiatorSettings() const noexcept;
+    void restorePerformanceSettingsFromState();
 
     aetherwave::dsp::WavetableBank wavetableBank;
     juce::AudioProcessorValueTreeState state;
     aetherwave::dsp::ModulationEngine modulationEngine;
     aetherwave::dsp::EffectsChain effectsChain;
     aetherwave::dsp::MasteringChain masteringChain;
+    aetherwave::dsp::AudioToMidiTracker audioToMidiTracker;
+    aetherwave::dsp::Arpeggiator arpeggiator;
     std::atomic<double> monoFrequencyMemory { 0.0 };
     juce::Synthesiser synthesiser;
     juce::MidiMessageCollector uiMidiCollector;
@@ -88,6 +98,26 @@ private:
     aetherwave::ai::MidiGenerator midiGenerator;
     std::shared_ptr<MidiGenerationSharedState> midiGenerationState;
     std::unique_ptr<juce::PropertiesFile> aiSettings;
+
+    std::atomic<bool> pitchEnabled { false };
+    std::atomic<float> pitchGateDb { -45.0f };
+    std::atomic<float> pitchMinFrequency { 65.0f };
+    std::atomic<float> pitchMaxFrequency { 1200.0f };
+    std::atomic<float> pitchConfidence { 0.72f };
+    std::atomic<int> pitchSmoothingFrames { 2 };
+    std::atomic<float> pitchVelocitySensitivity { 0.75f };
+    std::atomic<int> pitchScale { 0 };
+    std::atomic<int> pitchRoot { 0 };
+    std::atomic<bool> pitchRetrigger { true };
+
+    std::atomic<bool> arpEnabled { false };
+    std::atomic<int> arpMode { 0 };
+    std::atomic<int> arpRate { 2 };
+    std::atomic<int> arpOctaves { 1 };
+    std::atomic<float> arpGate { 0.72f };
+    std::atomic<bool> arpLatch { false };
+    std::atomic<float> arpSwing { 0.0f };
+    std::atomic<bool> arpRetrigger { true };
 
     std::atomic<double> currentSampleRate { 48000.0 };
     std::atomic<int> currentBlockSize { 0 };
