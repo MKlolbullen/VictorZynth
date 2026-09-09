@@ -8,13 +8,13 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(AETHERWAVE_WEB_DEV_SERVER "Load the React UI from http://localhost:3000 instead of embedded resources" OFF)
 option(AETHERWAVE_BUILD_WEB_UI "Build the React UI during CMake configure for embedding in the plugin" ON)
+option(AETHERWAVE_BUILD_TESTS "Build the native VST3 host smoke test" OFF)
 
 include(FetchContent)
 FetchContent_Declare(
     JUCE
     GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-    GIT_TAG 9.0.2
-    GIT_SHALLOW TRUE
+    GIT_TAG 72782788ce18c2d4d760b28e0921d6ffc6431102 # JUCE 9.0.2
 )
 FetchContent_MakeAvailable(JUCE)
 
@@ -29,7 +29,7 @@ if(AETHERWAVE_BUILD_WEB_UI)
     if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/node_modules/.bin/vite")
         message(STATUS "Installing frontend dependencies for embedded AetherWave UI")
         execute_process(
-            COMMAND "${NPM_EXECUTABLE}" install --no-audit --no-fund
+            COMMAND "${NPM_EXECUTABLE}" ci --no-audit --no-fund
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             COMMAND_ERROR_IS_FATAL ANY
         )
@@ -129,3 +129,17 @@ target_link_libraries(VictorZynth
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags
 )
+
+if(AETHERWAVE_BUILD_TESTS)
+    enable_testing()
+    juce_add_console_app(AetherWaveSmoke PRODUCT_NAME "AetherWaveSmoke")
+    target_sources(AetherWaveSmoke PRIVATE tests/NativeSmoke.cpp)
+    target_compile_definitions(AetherWaveSmoke PRIVATE
+        JUCE_PLUGINHOST_VST3=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_link_libraries(AetherWaveSmoke PRIVATE
+        juce::juce_audio_utils juce::juce_recommended_config_flags)
+    add_dependencies(AetherWaveSmoke VictorZynth_VST3)
+    add_test(NAME native-vst3-smoke COMMAND AetherWaveSmoke
+        "${CMAKE_CURRENT_BINARY_DIR}/VictorZynth_artefacts/$<CONFIG>/VST3/AetherWave.vst3")
+    set_tests_properties(native-vst3-smoke PROPERTIES TIMEOUT 120)
+endif()

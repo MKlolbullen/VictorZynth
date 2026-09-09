@@ -2,6 +2,10 @@ node_modules/
 build/
 dist/
 coverage/
+__pycache__/
+release/
+build-tools/
+validation-logs/
 .DS_Store
 *.log
 .env*

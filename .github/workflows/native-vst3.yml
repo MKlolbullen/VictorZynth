@@ -1,6 +1,8 @@
 name: Native VST3 CI
 
 on:
+  workflow_dispatch:
+  merge_group:
   pull_request:
     branches: [main]
   push:
@@ -8,12 +10,15 @@ on:
       - main
       - 'codex/**'
       - 'fix/**'
+      - 'feat/**'
+    tags: ['v*']
 
 permissions:
   contents: read
 
 concurrency:
-  group: native-vst3-${{ github.workflow }}-${{ github.ref }}
+  # Manual rebuilds must not cancel the required push/PR check for the same ref.
+  group: native-vst3-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -25,6 +30,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -33,10 +40,15 @@ jobs:
           package-manager-cache: false
 
       - name: Install frontend dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Type-check frontend
         run: npm run lint
+
+      - name: Test native host detection and packaging regressions
+        run: |
+          node --import tsx --test tests/bridge.test.ts
+          python3 -m unittest discover -s tests -p 'test_*.py' -v
 
       - name: Build plugin UI
         run: npm run build -- --mode plugin
@@ -45,6 +57,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
+            build-essential cmake pkg-config python3 file binutils \
+            xvfb xauth dbus-x11 ladspa-sdk \
             ninja-build \
             libasound2-dev \
             libjack-jackd2-dev \
@@ -67,20 +81,78 @@ jobs:
           cmake -S . -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Release
           -DAETHERWAVE_WEB_DEV_SERVER=OFF
-          -DAETHERWAVE_BUILD_WEB_UI=ON
+          -DAETHERWAVE_BUILD_WEB_UI=OFF
+          -DAETHERWAVE_BUILD_TESTS=ON
 
       - name: Build VST3 and Standalone
         run: >-
           cmake --build build
-          --target VictorZynth_VST3 VictorZynth_Standalone
+          --target VictorZynth_VST3 VictorZynth_Standalone AetherWaveSmoke
           --parallel 2
 
-      - name: Verify VST3 artifact
-        run: test -d build/VictorZynth_artefacts/Release/VST3/AetherWave.vst3
+      - name: Validate binary, manifest, exports and runtime libraries
+        run: >-
+          python3 scripts/package_linux.py validate
+          build/VictorZynth_artefacts/Release/VST3/AetherWave.vst3
+          --standalone build/VictorZynth_artefacts/Release/Standalone/AetherWave
+          --load
+
+      - name: Package complete bundle and preserve permissions
+        env:
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          python3 scripts/package_linux.py package build release --revision "$SOURCE_COMMIT"
+          cd release
+          sha256sum -c SHA256SUMS
+          mkdir unpacked
+          tar -xzf AetherWave-linux-x86_64.tar.gz -C unpacked
+
+      - name: Load packaged VST3 and test MIDI audio and state recall
+        timeout-minutes: 5
+        run: |
+          mkdir -p validation-logs
+          set -o pipefail
+          xvfb-run -a build/AetherWaveSmoke_artefacts/Release/AetherWaveSmoke \
+            "$PWD/release/unpacked/AetherWave.vst3" 2>&1 | tee validation-logs/native-smoke.log
+
+      - name: Checkout pinned pluginval source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Tracktion/pluginval
+          ref: ed19c2c16b57a6d94db391bea3ef4a80b769d5bf # v1.0.4; JUCE submodule pinned by this commit
+          submodules: recursive
+          path: build-tools/pluginval
+          persist-credentials: false
+
+      - name: Build pluginval
+        run: |
+          cmake -S build-tools/pluginval -B build-tools/pluginval-build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-tools/pluginval-build --target pluginval --parallel 2
+
+      - name: Validate packaged plugin including editor lifecycle
+        timeout-minutes: 10
+        run: |
+          set -o pipefail
+          dbus-run-session -- xvfb-run -a \
+            build-tools/pluginval-build/pluginval_artefacts/Release/pluginval \
+            --strictness-level 5 --random-seed 12345 --timeout-ms 60000 \
+            --validate "$PWD/release/unpacked/AetherWave.vst3" \
+            2>&1 | tee validation-logs/pluginval.log
+
+      - name: Upload validation logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: AetherWave-linux-validation-logs
+          path: validation-logs/
+          if-no-files-found: warn
 
       - name: Upload Linux VST3
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: AetherWave-linux-vst3
-          path: build/VictorZynth_artefacts/Release/VST3/AetherWave.vst3
+          path: |
+            release/AetherWave-linux-x86_64.tar.gz
+            release/SHA256SUMS
+            release/build-info.json
           if-no-files-found: error

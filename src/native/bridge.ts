@@ -107,8 +107,14 @@ export interface NativeMidiLibraryItem {
   modifiedMs: number;
 }
 
-export const isNativePluginHost = (): boolean =>
-  typeof window !== 'undefined' && typeof window.__JUCE__ !== 'undefined';
+export const isNativePluginHost = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  // The JUCE npm package installs a mock __JUCE__ in ordinary browsers.
+  // Only a real AetherWave backend advertises these registered functions.
+  const functions = window.__JUCE__?.initialisationData?.__juce__functions;
+  return Array.isArray(functions)
+    && ['getParameterSnapshot', 'setParameter', 'noteOn'].every(name => functions.includes(name));
+};
 
 async function callNative<T>(name: string, ...args: unknown[]): Promise<T | null> {
   if (!isNativePluginHost()) return null;
@@ -132,6 +138,10 @@ export async function getNativeParameterSnapshot(): Promise<Record<string, numbe
     }
   }
   return snapshot;
+}
+
+export async function getNativeAuxiliaryState(): Promise<{ modMatrixJson: string; uiStateJson: string } | null> {
+  return callNative('getAuxiliaryState');
 }
 
 export async function setNativeParameter(id: string, value: number): Promise<boolean> {
