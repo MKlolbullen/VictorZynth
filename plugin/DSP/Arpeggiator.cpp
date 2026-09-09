@@ -121,8 +121,8 @@ void Arpeggiator::process(const juce::MidiBuffer& input,
     };
 
     // Advance generated timing only up to (not beyond) an input MIDI event. If an
-    // arp event lands exactly on the same sample, the incoming event is applied first,
-    // then the due arp event is emitted from the updated note set.
+    // arp event lands exactly on the same sample, incoming events at that sample are
+    // applied first and the due arp event then uses the updated chord.
     auto advanceTo = [&](double target)
     {
         while (cursor < target)
@@ -186,7 +186,7 @@ void Arpeggiator::process(const juce::MidiBuffer& input,
         }
     };
 
-    bool settingsChanged = settings.mode != lastMode || settings.octaves != lastOctaves;
+    bool settingsChangePending = settings.mode != lastMode || settings.octaves != lastOctaves;
 
     // A latched note-off was intentionally ignored while latch was on. When latch is
     // switched off, reconcile against the keys that are physically still down so stale
@@ -194,24 +194,54 @@ void Arpeggiator::process(const juce::MidiBuffer& input,
     if (lastLatch && ! settings.latch)
     {
         reconcileHeldNotesWithPhysical();
-        settingsChanged = true;
+        settingsChangePending = true;
     }
 
     lastLatch = settings.latch;
     lastMode = settings.mode;
     lastOctaves = settings.octaves;
 
-    if (settingsChanged)
-        rebuildAt(0, settings.retrigger);
+    int groupPosition = -1;
+    bool groupNoteSetChanged = false;
+
+    auto flushInputGroup = [&]()
+    {
+        if (groupPosition < 0)
+            return;
+
+        if (groupNoteSetChanged)
+            rebuildAt(groupPosition, settings.retrigger);
+
+        // A pre-existing scheduled transition that lands on the same sample waits until
+        // the complete MIDI chord/event group at that sample has been applied.
+        emitDueAt(groupPosition);
+        groupNoteSetChanged = false;
+    };
 
     for (const auto metadata : input)
     {
         const auto message = metadata.getMessage();
         const auto position = juce::jlimit(0, maxSamplePosition, metadata.samplePosition);
 
-        advanceTo(static_cast<double>(position));
+        if (groupPosition != position)
+        {
+            flushInputGroup();
+            groupPosition = position;
 
-        bool noteSetChanged = false;
+            // Parameter/latch changes are block-boundary changes. If the first MIDI event
+            // is later than sample 0, apply those changes at sample 0 before advancing.
+            // If the first event is at sample 0, fold the change into that same event group.
+            if (settingsChangePending)
+            {
+                if (position > 0)
+                    rebuildAt(0, settings.retrigger);
+                else
+                    groupNoteSetChanged = true;
+                settingsChangePending = false;
+            }
+
+            advanceTo(static_cast<double>(position));
+        }
 
         if (message.isNoteOn())
         {
@@ -228,7 +258,7 @@ void Arpeggiator::process(const juce::MidiBuffer& input,
             physicalNotes[static_cast<std::size_t>(note)] = true;
             heldNotes[static_cast<std::size_t>(note)] = true;
             noteVelocities[static_cast<std::size_t>(note)] = message.getFloatVelocity();
-            noteSetChanged = true;
+            groupNoteSetChanged = true;
         }
         else if (message.isNoteOff())
         {
@@ -237,7 +267,7 @@ void Arpeggiator::process(const juce::MidiBuffer& input,
             if (! settings.latch)
             {
                 heldNotes[static_cast<std::size_t>(note)] = false;
-                noteSetChanged = true;
+                groupNoteSetChanged = true;
             }
         }
         else
@@ -249,20 +279,18 @@ void Arpeggiator::process(const juce::MidiBuffer& input,
                 {
                     clearHeldNotes();
                     physicalNotes.fill(false);
-                    noteSetChanged = true;
+                    groupNoteSetChanged = true;
                 }
             }
 
             output.addEvent(message, position);
         }
-
-        if (noteSetChanged)
-            rebuildAt(position, settings.retrigger);
-
-        // If a previously scheduled arp transition lands on this exact sample, it must
-        // happen after the triggering input event rather than at sample 0 or before it.
-        emitDueAt(position);
     }
+
+    flushInputGroup();
+
+    if (settingsChangePending)
+        rebuildAt(0, settings.retrigger);
 
     // Emit generated events strictly inside the remainder of this block. A transition
     // exactly on the block boundary carries a zero timer into the next block and is
