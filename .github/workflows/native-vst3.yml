@@ -2,24 +2,35 @@ name: Native VST3 CI
 
 on:
   pull_request:
+    branches: [main]
   push:
     branches:
       - main
       - 'codex/**'
+      - 'fix/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-vst3-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   linux-vst3:
+    name: Linux VST3 + Standalone
     runs-on: ubuntu-24.04
     timeout-minutes: 35
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
+          package-manager-cache: false
 
       - name: Install frontend dependencies
         run: npm install --no-audit --no-fund
@@ -59,10 +70,16 @@ jobs:
           -DAETHERWAVE_BUILD_WEB_UI=ON
 
       - name: Build VST3 and Standalone
-        run: cmake --build build --target VictorZynth_VST3 VictorZynth_Standalone --parallel 2
+        run: >-
+          cmake --build build
+          --target VictorZynth_VST3 VictorZynth_Standalone
+          --parallel 2
+
+      - name: Verify VST3 artifact
+        run: test -d build/VictorZynth_artefacts/Release/VST3/AetherWave.vst3
 
       - name: Upload Linux VST3
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: AetherWave-linux-vst3
           path: build/VictorZynth_artefacts/Release/VST3/AetherWave.vst3
