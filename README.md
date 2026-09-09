@@ -1,209 +1,366 @@
-# VictorZynth — AetherWave Wavetable Synthesizer
+# VictorZynth — AetherWave
 
 <p align="center">
-  <strong>A modular Web Audio wavetable synthesizer, modulation playground, soundscape engine, and REAPER workflow bridge.</strong>
+  <strong>A native JUCE/VST3 wavetable synthesizer with an embedded React UI, HUM → MIDI performance input, four-way arpeggiator, mastering tools, modulation, effects, and AI-assisted MIDI composition.</strong>
 </p>
 
 <p align="center">
-  React 19 · TypeScript · Vite · Web Audio API · Web MIDI · REAPER JSFX
+  <a href="https://github.com/MKlolbullen/VictorZynth/actions/workflows/native-vst3.yml"><img src="https://github.com/MKlolbullen/VictorZynth/actions/workflows/native-vst3.yml/badge.svg" alt="Native VST3 CI" /></a>
+  <img src="https://img.shields.io/badge/version-0.4.0-22d3ee" alt="Version 0.4.0" />
+  <img src="https://img.shields.io/badge/JUCE-9.0.2-8b5cf6" alt="JUCE 9.0.2" />
+  <img src="https://img.shields.io/badge/plugin-VST3-10b981" alt="VST3" />
+  <img src="https://img.shields.io/badge/C%2B%2B-20-00599C" alt="C++20" />
+  <img src="https://img.shields.io/badge/React-19-61DAFB" alt="React 19" />
+  <img src="https://img.shields.io/badge/TypeScript-5.8-3178C6" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/DAW-REAPER-f97316" alt="REAPER" />
 </p>
 
 <p align="center">
-  <img src="docs/images/overview.svg" alt="VictorZynth / AetherWave synthesizer interface" width="100%" />
+  <img src="docs/images/runtime-overview.png" alt="AetherWave current-build user interface" width="100%" />
 </p>
 
-> **Project naming:** the repository is **VictorZynth** while the current instrument UI identifies the synth as **AetherWave**. The README uses both names where that distinction matters.
+> **Naming:** the repository is **VictorZynth**. The instrument/plugin presented to the host and in the UI is **AetherWave**.
 
-## What is VictorZynth?
+## What is AetherWave?
 
-VictorZynth is an experimental, browser-native synthesizer built for hands-on sound design rather than pretending a pile of sliders is a workflow.
+AetherWave is a real native software instrument: the audio path runs in C++/JUCE, the plugin builds as **VST3 + Standalone**, and the existing React interface is embedded inside the native plugin through a JUCE WebView bridge.
 
-The current instrument combines two morphable wavetable oscillators, sub/noise layers, a multi-mode filter, dual LFOs, dual envelopes, macro controls, an animated modulation matrix, a studio-style effects chain, real-time signal visualization, Web MIDI input, preset management, WAV recording, and a REAPER export surface.
+The project started as a browser/Web Audio wavetable synth and has since grown into a native instrument with 16-voice synthesis, modulation, effects, host automation/state, production/mastering tools, AI MIDI generation, microphone pitch-to-MIDI, MIDI output, and a tempo-synchronised arpeggiator.
 
-The UI is intentionally closer to a hardware/modular instrument than a conventional web dashboard: modulation is visible, signal flow is explicit, and most of the synth can be explored without leaving the main workspace.
+The browser engine still exists as a useful development/preview runtime. Inside a DAW, however, audio generation and processing are native C++—the WebView is the interface, not the DSP engine.
+
+## Current-build UI
+
+These PNGs are generated from the current React interface by the repository's screenshot workflow rather than being hand-drawn mockups. Native-only panels are exposed during documentation capture with idle telemetry; in the plugin those same components receive live data from JUCE.
+
+### HUM → MIDI + arpeggiator
+
+<p align="center">
+  <img src="docs/images/runtime-performance.png" alt="AetherWave HUM to MIDI and arpeggiator interface" width="100%" />
+</p>
+
+### Studio mastering
+
+<p align="center">
+  <img src="docs/images/runtime-studio.png" alt="AetherWave Studio mastering interface" width="100%" />
+</p>
+
+## Signal path
+
+```text
+Mic / audio input ──► Pitch detector ──► MIDI ──┐
+                                                │
+DAW MIDI / virtual keyboard ────────────────────┤
+                                                ▼
+                                         Arpeggiator
+                                                │
+                                                ▼
+                                      Performance MIDI
+                                       ├──────────────► VST MIDI out / host recording
+                                       │
+                                       ▼
+                               Modulation + Synthesiser
+                                       │
+                                       ▼
+                              Chorus / Delay / Reverb
+                                       │
+                                       ▼
+                               Drive / Master Limiter
+                                       │
+                                       ▼
+                           Optional Studio Mastering
+                                       │
+                                       ▼
+                                      Audio out
+```
 
 ## Highlights
 
-### Dual wavetable synthesis
+### Native wavetable synthesiser
 
-- Two independent wavetable oscillators with frame morphing.
-- Multiple waveform tables including basic, harmonic, vocal, metallic, digital, and ambient-oriented material.
-- Warp modes such as Bend, Sync, PWM, Mirror, and Drive.
-- Unison, detune, stereo spread, level, pitch, and continuous phase-offset control.
-- Dedicated sub oscillator and multi-flavor noise generator.
+- **16-voice polyphony** using JUCE `SynthesiserVoice` instances.
+- Two wavetable oscillators per voice.
+- Six native wavetable families:
+  - Analog Warmth
+  - Spectral Void
+  - Celestial Drone
+  - Vocal Formants
+  - Cyber Wavefold
+  - Metallic Bell
+- Continuous wavetable position/morphing.
+- Warp modes: **None, Sync, Bend, FM, Wavefold, PWM**.
+- Unison up to 7 voices per oscillator with detune and stereo spread.
+- Oscillator octave, semitone, fine tune, phase, pan and level controls.
+- Dedicated sub oscillator and noise layer.
+- Glide plus Poly / Mono / Legato performance modes.
 
-### Multi-mode filter
+### Filter + native effects
 
-- 24 dB/oct and 12 dB/oct low-pass modes.
-- Band-pass, high-pass, comb, and notch responses.
-- Cutoff, resonance, drive, and key tracking.
-- Real-time filter response visualization.
-
-### Modulation system
-
-- Dual LFOs with free-running and tempo-oriented behavior.
-- Dual ADSR envelopes.
-- Four assignable macro controls.
-- Sources including LFOs, envelopes, macros, mod wheel, velocity, key tracking, and chaos drift.
-- Destinations spanning oscillator position/warp/pitch/level, filter parameters, FX mix, delay time, LFO rates, and stereo pan.
-- Bipolar or unipolar routing depth.
-- Live modulation telemetry.
-
-<p align="center">
-  <img src="docs/images/modulation-matrix.svg" alt="VictorZynth modular modulation matrix" width="100%" />
-</p>
-
-### Modular cable view
-
-The modulation matrix has two ways to think about routing: a conventional routing-table view and a patch-cable view. The cable renderer draws animated source-to-destination connections and uses live modulation values to visualize signal activity.
-
-This is one of the more interesting parts of the project because modulation stops being invisible state and becomes something you can actually inspect.
-
-### Effects and output
-
-- Stereo chorus / flanger style spatial processing.
+- Multi-mode filter with low-pass, band-pass, high-pass, notch and comb-style modes.
+- Cutoff, resonance, key tracking and drive.
+- Native stereo chorus.
 - Ping-pong delay.
 - Algorithmic reverb.
-- Soft-clipping drive / saturation.
-- Master output control.
-- Live WAV recording from the browser audio engine.
+- Master drive/saturation.
+- Output limiter.
 
-### Visualizer engine
+### Modulation engine
 
-The visualizer can present several views of the current signal, including waveform, spectrum, combined spectral/time-domain information, stereo phase, and modulation-oriented telemetry.
+The modulation system lives in the native processor and is shared with the UI through telemetry/state bridging.
 
-### Presets and performance controls
+Sources include:
 
-- Factory preset library.
-- Category filtering for Pads, Leads, Bass, FX, Atmospheres, Ambient Drones, Cinematic sounds, and user presets.
-- Browser-local user preset storage.
-- Virtual keyboard.
-- Drone mode.
-- USB / hardware controller support through the Web MIDI API.
-- Mod wheel and pitch-bend input.
+- LFO 1 / LFO 2
+- Envelope 1 / Envelope 2
+- Macro 1–4
+- Mod wheel
+- Pitch bend
+- Velocity
+- Chaos/random modulation
 
-## REAPER integration
+Destinations include oscillator pitch/position/warp/phase/level, filter cutoff/resonance/drive, reverb mix, delay mix/time, chorus mix, LFO rates and pan.
 
-VictorZynth includes a dedicated REAPER integration/export modal for taking the current instrument state into a DAW-oriented workflow.
+The modulation matrix JSON is stored in plugin state, while live source/destination values are exposed to the React interface for visual feedback.
 
-<p align="center">
-  <img src="docs/images/reaper-export.svg" alt="VictorZynth REAPER export interface" width="100%" />
-</p>
+## HUM → MIDI
 
-The export surface currently covers:
+AetherWave can use an audio signal—typically a microphone—as a monophonic performance controller.
 
-- REAPER JSFX generation.
-- Copy/download workflow for generated JSFX code.
-- MIDI CC mapping references.
-- Preset import/export helpers.
-- User preset management.
-- REAPER installation guidance.
+The native `Pitch Input` bus feeds a YIN-style pitch tracker which turns the detected fundamental into MIDI notes before the synth engine.
 
-### Important: Web instrument vs native VST3
+Features include:
 
-The current repository is a **React/Web Audio synthesizer with REAPER JSFX export**. It does **not currently contain a native C++/JUCE build system that emits a `.vst3` binary**.
+- Real-time monophonic pitch detection.
+- Input gate and confidence threshold.
+- Configurable low/high pitch range.
+- Pitch-stability/smoothing control.
+- Velocity derived from input level.
+- New-note/onset retrigger handling.
+- Chromatic, Major and Minor scale snapping.
+- Selectable root note for scale quantisation.
+- Live waveform, detected note, frequency, confidence, onset and input-level telemetry.
+- Generated MIDI is fed directly into the selected AetherWave patch.
+- Generated MIDI is also emitted through the VST MIDI output so the DAW can record it.
 
-That distinction matters. The interface can model a VST-style instrument workflow and export native REAPER JSFX, but producing a real VST3/AU/CLAP plugin would require an additional host layer such as JUCE, iPlug2, DISTRHO, or another native plugin framework.
+In other words: **hum a line, let AetherWave detect it, play it through the current synth patch, and optionally record the resulting MIDI.**
+
+## Four-way arpeggiator
+
+The arpeggiator sits after incoming/detected MIDI, so it works with:
+
+- DAW MIDI input
+- the embedded virtual keyboard
+- hardware/host MIDI
+- HUM → MIDI notes
+
+Traversal modes:
+
+1. **Up** — low → high
+2. **Down** — high → low
+3. **Up / Down** — low → high → low
+4. **Down / Up** — high → low → high
+
+Additional controls:
+
+- Host-tempo sync.
+- 1/4, 1/8, 1/16 and 1/32 note rates.
+- 1–4 octave expansion.
+- Gate length.
+- Swing.
+- Latch.
+- Chord retrigger.
+- Sample-position-aware MIDI scheduling for clean intra-block timing.
+
+## Studio mastering
+
+The MyVST3 production layer was folded into AetherWave as a **backend/tooling layer**, not as a second plugin processor or a second native UI.
+
+The optional Studio chain runs after the main synth/effects path and is **disabled by default** so older patches keep their sound.
+
+It provides:
+
+- Input and output trim.
+- Five-band EQ:
+  - high-pass
+  - low shelf
+  - parametric peak 1
+  - parametric peak 2
+  - high shelf
+- Stereo-linked soft-knee compressor.
+- Makeup gain.
+- Brickwall limiter.
+- Limiter ceiling/release controls.
+- Gain-reduction telemetry.
+- Input/output meters.
+- Momentary LUFS monitoring.
+- FFT/spectrum telemetry.
+
+Studio parameters use stable APVTS IDs and are available to host automation/state.
+
+## AI Composer + MIDI library
+
+AetherWave also includes a background-thread MIDI composition/arrangement tool.
+
+Supported workflows:
+
+- Anthropic API.
+- OpenAI-compatible endpoints.
+- Local OpenAI-compatible model endpoints.
+- Single MIDI clip generation.
+- Multi-track arrangement generation.
+- MIDI humanisation/parsing/writing.
+- Recent MIDI library inside the plugin UI.
+
+Generated files are written to:
+
+```text
+~/Documents/VictorZynth-MIDI
+```
+
+Provider/model/API-key settings are stored **machine-local** using JUCE application settings and are deliberately not stored inside the DAW/VST project state.
+
+## React/WebView native UI
+
+AetherWave keeps the React interface while using native C++ for the real plugin runtime:
+
+```text
+React 19 + TypeScript
+        │
+        ▼
+JUCE WebView bridge
+        │
+        ├──► APVTS parameters / automation gestures
+        ├──► MIDI note / pitch-bend / mod-wheel messages
+        ├──► host transport + tempo + time signature
+        ├──► modulation telemetry
+        ├──► HUM → MIDI / arpeggiator state + telemetry
+        ├──► Studio mastering telemetry
+        └──► AI MIDI controls / library
+        │
+        ▼
+Native JUCE processor + DSP
+```
+
+Release builds embed the production Vite bundle through JUCE `BinaryData`; the VST3 does **not** depend on `localhost`, a running Node server, or an external web directory.
+
+## REAPER usage
+
+### Install the plugin
+
+After building, copy the generated `AetherWave.vst3` bundle into a VST3 location scanned by REAPER, then rescan plugins.
+
+The Linux CI artifact is produced at:
+
+```text
+build/VictorZynth_artefacts/Release/VST3/AetherWave.vst3
+```
+
+### Normal MIDI instrument use
+
+1. Insert **VST3i: AetherWave** on a track.
+2. Route or record-arm MIDI as usual.
+3. Pick a factory/user preset or create a patch.
+4. Play from REAPER, a controller, or the embedded keyboard.
+5. Automate native parameters from the DAW where desired.
+
+### HUM → MIDI in REAPER
+
+1. Put AetherWave on the destination instrument track.
+2. Route your microphone/audio source into AetherWave's **Pitch Input** audio channels.
+3. Open the **HUM → MIDI** panel and enable listening.
+4. Set gate, pitch range, stability and scale/root as needed.
+5. Select the synth patch you want to play from the normal preset selector.
+6. Optionally enable the arpeggiator.
+7. To capture generated MIDI, use REAPER's track recording mode for **Record: output (MIDI)** or route the plugin's MIDI output to another track.
+
+The native processor accepts mono or stereo Pitch Input and always produces stereo audio output.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    MIDI[Web MIDI / Virtual Keyboard] --> Engine[SynthAudioEngine]
-    UI[React Synth UI] --> State[Synth State]
-    State --> Engine
+    UI[React / TypeScript UI] <--> Bridge[JUCE WebView bridge]
+    Bridge <--> State[APVTS + plugin state]
+    Bridge <--> Telemetry[Host / DSP telemetry]
 
-    Engine --> OSC[Wavetable Oscillators]
-    Engine --> MOD[LFOs / Envelopes / Macros]
-    MOD --> Matrix[Modulation Matrix]
-    Matrix --> OSC
-    Matrix --> Filter[Multi-mode Filter]
-    Matrix --> FX[Effects Chain]
+    Mic[Pitch Input audio] --> Pitch[AudioToMidiTracker]
+    Pitch --> MidiMerge[MIDI merge]
+    HostMidi[DAW / controller / UI MIDI] --> MidiMerge
+    MidiMerge --> Arp[Arpeggiator]
+    Arp --> Perf[Performance MIDI]
 
-    OSC --> Filter --> FX --> Out[Master Output]
-    Out --> Recorder[WAV Recorder]
-    Out --> Analyser[AnalyserNode]
-    Analyser --> Viz[Oscilloscope / FFT / Phase / Mod Views]
+    Perf --> MidiOut[VST MIDI output]
+    Perf --> Mod[ModulationEngine]
+    Perf --> Synth[16-voice Wavetable Synth]
+    Mod --> Synth
 
-    State --> Export[REAPER Export Modal]
-    Export --> JSFX[Generated JSFX]
-    Export --> Presets[Preset JSON / User Presets]
-    Export --> CC[MIDI CC Reference]
+    Synth --> FX[Filter + Chorus + Delay + Reverb + Drive + Limiter]
+    FX --> Studio[Optional Studio Mastering]
+    Studio --> AudioOut[Stereo audio output]
+
+    Bridge --> AI[AI MIDI Generator]
+    AI --> Library[~/Documents/VictorZynth-MIDI]
 ```
 
-## Project structure
-
-```text
-VictorZynth/
-├── public/
-├── docs/
-│   └── images/
-│       ├── overview.svg
-│       ├── modulation-matrix.svg
-│       └── reaper-export.svg
-├── src/
-│   ├── audio/
-│   │   ├── engine.ts
-│   │   ├── presets.ts
-│   │   └── wavetables.ts
-│   ├── components/
-│   │   ├── EffectsSection.tsx
-│   │   ├── FilterSection.tsx
-│   │   ├── Knob.tsx
-│   │   ├── ModulationMatrix.tsx
-│   │   ├── ModulationSection.tsx
-│   │   ├── OscillatorSection.tsx
-│   │   ├── PhaseOffsetDial.tsx
-│   │   ├── ReaperExportModal.tsx
-│   │   ├── ReaperHostBar.tsx
-│   │   ├── VirtualKeyboard.tsx
-│   │   ├── VisualizerSection.tsx
-│   │   └── WavetableVisualizer.tsx
-│   ├── types/
-│   │   └── synth.ts
-│   ├── App.tsx
-│   ├── index.css
-│   └── main.tsx
-├── index.html
-├── package.json
-├── tsconfig.json
-└── vite.config.ts
-```
-
-## Getting started
+## Building
 
 ### Requirements
 
-- Node.js 18+ recommended.
-- npm.
-- A modern browser with Web Audio support.
-- A Chromium-based browser is the safest choice if you want Web MIDI hardware input.
+Core build requirements:
 
-### Install
+- CMake 3.22+
+- C++20 compiler
+- Ninja recommended
+- Node.js 22 + npm
+- JUCE 9.0.2 is fetched automatically by CMake
+
+Linux also needs the JUCE audio/GUI/WebView development libraries. The authoritative package list lives in `.github/workflows/native-vst3.yml`.
+
+### Clone
 
 ```bash
 git clone https://github.com/MKlolbullen/VictorZynth.git
 cd VictorZynth
-npm install
 ```
 
-### Run the development server
+### Build the native plugin
 
 ```bash
+npm install --no-audit --no-fund
+
+cmake -S . -B build -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DAETHERWAVE_WEB_DEV_SERVER=OFF \
+  -DAETHERWAVE_BUILD_WEB_UI=ON
+
+cmake --build build \
+  --target VictorZynth_VST3 VictorZynth_Standalone \
+  --parallel 2
+```
+
+Outputs:
+
+```text
+build/VictorZynth_artefacts/Release/VST3/AetherWave.vst3
+build/VictorZynth_artefacts/Release/Standalone/AetherWave
+```
+
+### Browser/UI development
+
+The original browser/Web Audio runtime remains useful for fast UI work:
+
+```bash
+npm install
 npm run dev
 ```
 
-Vite is configured to serve the project on:
+Then open:
 
 ```text
 http://localhost:3000
 ```
 
-### Production build
-
-```bash
-npm run build
-```
+Browser mode uses the Web Audio engine. Native-only Performance/Studio tools appear when the UI is running inside the JUCE host.
 
 ### Type-check
 
@@ -211,60 +368,118 @@ npm run build
 npm run lint
 ```
 
-The current `lint` script runs TypeScript with `--noEmit`.
+### Build only the embedded UI
 
-## Using the synth
+```bash
+npm run build -- --mode plugin
+```
 
-1. Start the development server and open the local application.
-2. Click **Enable Audio Engine** or interact with the interface to initialize browser audio.
-3. Load a preset or build a patch from the oscillators.
-4. Shape the sound with the filter and effects chain.
-5. Add modulation routes in the **Modular Modulation Matrix**.
-6. Play from the virtual keyboard or connect a MIDI controller.
-7. Use the visualizer to inspect the signal and modulation behavior.
-8. Record the result to WAV or open the REAPER export modal.
+This writes the deterministic embedded assets expected by CMake under:
 
-## Using the generated JSFX in REAPER
+```text
+plugin/WebUI/dist/
+```
 
-1. Open **REAPER Integration & Export** in VictorZynth.
-2. Generate/copy the JSFX script for the current state.
-3. In REAPER, choose **Options → Show REAPER resource path in explorer/finder**.
-4. Open the `Effects` directory.
-5. Create an `AetherWave` JSFX file and paste the generated script.
-6. Refresh REAPER's FX browser if necessary.
-7. Add the JSFX to a track and map MIDI/automation parameters as needed.
+## Project structure
 
-## Technology
+```text
+VictorZynth/
+├── .github/workflows/
+│   ├── native-vst3.yml
+│   └── capture-readme-screenshots.yml
+├── docs/images/
+│   ├── runtime-overview.png
+│   ├── runtime-performance.png
+│   ├── runtime-studio.png
+│   └── *.svg
+├── plugin/
+│   ├── AI/
+│   │   └── MidiGenerator.*
+│   ├── DSP/
+│   │   ├── Arpeggiator.*
+│   │   ├── AudioToMidiTracker.*
+│   │   ├── EffectsChain.*
+│   │   ├── MasteringChain.*
+│   │   ├── ModulationEngine.*
+│   │   ├── WavetableBank.*
+│   │   └── WavetableVoice.*
+│   ├── Parameters/
+│   │   └── Parameters.*
+│   ├── Source/
+│   │   ├── PluginEditor.*
+│   │   └── PluginProcessor.*
+│   └── WebUI/dist/              # generated embedded React bundle
+├── src/
+│   ├── audio/
+│   │   ├── engine.ts            # browser/Web Audio runtime
+│   │   ├── runtime.ts           # browser/native runtime facade
+│   │   ├── presets.ts
+│   │   └── wavetables.ts
+│   ├── components/
+│   │   ├── PerformanceToolsSection.tsx
+│   │   ├── StudioToolsSection.tsx
+│   │   ├── ModulationMatrix.tsx
+│   │   ├── EffectsSection.tsx
+│   │   └── ...
+│   ├── native/
+│   │   └── bridge.ts
+│   ├── types/
+│   └── App.tsx
+├── CMakeLists.txt
+├── package.json
+└── vite.config.ts
+```
 
-| Layer | Technology |
-| --- | --- |
-| UI | React 19 + TypeScript |
-| Build tooling | Vite 6 |
-| Styling | Tailwind CSS 4 + custom CSS |
-| Audio | Web Audio API |
-| MIDI | Web MIDI API |
-| Motion / UI interaction | Motion |
-| Icons | Lucide React |
-| DAW bridge | Generated REAPER JSFX |
-| Presets | TypeScript models + browser local storage |
+## Native state and realtime design
 
-## Current direction
+A few architectural rules are deliberate:
 
-The most valuable next step is to make the project choose one of two identities cleanly:
+- **Audio stays native.** React/WebView never performs plugin DSP.
+- **The audio callback does not make AI/network requests.** MIDI generation runs on a background thread.
+- **Stable parameter IDs matter.** Existing IDs such as `master.volume` are preserved for automation compatibility.
+- **Normal UI edits are incremental.** They do not overwrite unrelated DAW-automated parameters.
+- **Modulation/performance state is persisted with the plugin.**
+- **API credentials are not VST project state.** They remain machine-local.
+- **Studio mastering is opt-in.** Existing patches are not silently remastered.
 
-**A. Best-in-class web synth / REAPER companion** — lean hard into Web Audio, JSFX export, MIDI mapping, preset exchange, and a polished browser instrument.
+## CI
 
-**B. True native plugin** — add a native audio/plugin shell and compile the DSP/UI into VST3, CLAP, and optionally AU builds.
+`Native VST3 CI` validates the complete Linux build path:
 
-Trying to describe the current codebase as both at once muddies the architecture. The synth itself is already interesting enough that the packaging layer should be explicit rather than hand-waved.
+- frontend dependency install
+- TypeScript type-check
+- production plugin UI build
+- JUCE/Linux dependency setup
+- CMake configure
+- VST3 build
+- Standalone build
+- VST3 artifact verification
+- artifact upload
+
+The workflow uses pinned GitHub Action SHAs and runs on Ubuntu 24.04.
+
+## Status
+
+AetherWave is an actively developed experimental instrument. The native VST3 pipeline is functional and CI-built; the next stage is increasingly about **runtime/DAW validation, DSP refinement, portability and musical feel** rather than proving that the plugin shell exists.
+
+Useful next areas include:
+
+- Windows/macOS CI and packaging.
+- pluginval validation.
+- deeper REAPER routing/automation tests.
+- improved wavetable anti-aliasing/oversampling.
+- pitch-tracker tuning against real voice/instrument recordings.
+- additional arp patterns and clock options.
+- Tap Pattern / Sample Shaper ports from the MyVST3 donor project.
+- OS keychain-backed AI credential storage.
 
 ## Contributing
 
-Issues and pull requests are welcome. Useful areas for contributions include DSP correctness, performance profiling, wavetable tooling, modulation UX, preset design, REAPER export fidelity, accessibility, and a future native-plugin host layer.
+Issues and pull requests are welcome. DSP correctness, plugin-host compatibility, realtime safety, UI/UX, preset design, testing and platform packaging are especially useful areas.
 
 ---
 
 <p align="center">
   <strong>VictorZynth / AetherWave</strong><br />
-  Wavetables, cables, modulation, and an arguably unreasonable number of glowing cyan things.
+  Native wavetables, modulation cables, hum-driven MIDI, and—yes—still an arguably unreasonable amount of cyan.
 </p>
