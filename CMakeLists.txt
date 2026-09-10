@@ -15,6 +15,8 @@ FetchContent_Declare(
     JUCE
     GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
     GIT_TAG 72782788ce18c2d4d760b28e0921d6ffc6431102 # JUCE 9.0.2
+    PATCH_COMMAND ${CMAKE_COMMAND} -DJUCE_SOURCE_DIR=<SOURCE_DIR>
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/PatchJuceWebKit.cmake
 )
 FetchContent_MakeAvailable(JUCE)
 

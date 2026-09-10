@@ -31,6 +31,7 @@ def resource(request):
     headers = Soup.MessageHeaders.new(Soup.MessageHeadersType.RESPONSE)
     headers.append("Content-Type", mime)
     response.set_http_headers(headers)
+    response.set_content_type(mime)
     response.set_status(200 if filename else 404, None)
     request.finish_with_response(response)
 
