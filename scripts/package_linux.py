@@ -87,6 +87,7 @@ def package_build(build_dir, output_dir, revision):
         tar.add(standalone, arcname="standalone/AetherWave")
         tar.add(build_info, arcname="build-info.json")
         tar.add(Path(__file__).resolve().parents[1] / "docs/REAPER-Linux.md", arcname="README-Linux.md")
+        tar.add(Path(__file__).resolve().parent / "install_linux.py", arcname="install-linux.py")
     # Check the actual archive, not only the pre-upload directory.
     with tarfile.open(archive) as tar:
         require(tar.getmember("AetherWave.vst3/Contents/x86_64-linux/AetherWave.so").size > 0,

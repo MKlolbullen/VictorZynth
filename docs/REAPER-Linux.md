@@ -9,9 +9,19 @@ The synth, MIDI input and embedded UI work without an API key or Node server.
 1. Download the `AetherWave-linux-vst3` artifact from a successful **Native VST3 CI**
    run for the source commit you want. Unzip the outer GitHub artifact ZIP.
 2. Verify `sha256sum -c SHA256SUMS`, then extract `AetherWave-linux-x86_64.tar.gz`.
-3. Close REAPER. Copy the entire `AetherWave.vst3` directory to `~/.vst3/`.
-   If an older copy exists, move it outside all plugin scan paths first so it is
-   recoverable; do not merge old and new bundle contents or keep duplicate copies.
+3. Close REAPER. In the extracted package directory, run:
+
+   ```bash
+   python3 install-linux.py --check
+   python3 install-linux.py
+   ```
+
+   The installer verifies the module checksum and runtime dependencies, then
+   installs the complete bundle in `~/.vst3/`. It requires Python 3.9 or newer.
+   No sudo is needed. For an update, run `python3 install-linux.py --replace`.
+   This preserves the old bundle under `${XDG_DATA_HOME:-~/.local/share}/AetherWave/backups/`
+   and prints its exact path. Keep that backup directory outside all REAPER scan paths.
+   `--destination /your/vst3/path` selects another scan directory.
 4. Open REAPER, go to **Preferences → Plug-ins → VST**, ensure `~/.vst3` is in the
    scan paths, and rescan. If a previous scan failed, use **Re-scan → Clear cache
    and re-scan**. Insert **VST3i: AetherWave** on a track.
@@ -26,7 +36,15 @@ Do not install just `AetherWave.so`, or a bare `Contents` directory. Older artif
 ZIPs lacked the enclosing bundle directory: extract those into a newly created
 `AetherWave.vst3` directory before installing. Prefer the newly validated package.
 The ZIP checked into the repository root is historical (its manifest reports
-0.2.0); it is not a build of current main. Use the CI artifact tied to your commit.
+0.2.0); it is not a build of current main. Release `v.0.1.7` also predates the
+validated installation pipeline. Use a new validated CI package or a release
+created from it, and check the source commit in `build-info.json`.
+
+For an older package without the installer, manually copy the entire bundle to
+`~/.vst3/`. Move an existing installation outside every scan path first; do not
+merge old and new bundle contents. To restore an installer backup, close REAPER,
+move the current bundle out of the scan path, and copy the printed backup
+directory back as `~/.vst3/AetherWave.vst3`.
 
 The `standalone/AetherWave` executable is optional and is not the VST3 plugin.
 
@@ -57,6 +75,6 @@ package names; build locally on older distributions rather than replacing glibc.
 - For hum-to-MIDI, select microphone audio input and enable HUM → MIDI; keep it off
   for the initial ordinary MIDI test. Use headphones to avoid acoustic feedback.
 
-CI loads the packaged module and checks MIDI audio, state recall, layouts and
+CI installs the extracted package, then loads the installed module and checks MIDI audio, state recall, layouts and
 sample rates, then runs pluginval including GUI tests under a virtual display.
 This is host-compatibility evidence, not a substitute for the REAPER steps above.

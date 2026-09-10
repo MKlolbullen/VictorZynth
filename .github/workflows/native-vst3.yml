@@ -2,6 +2,11 @@ name: Native VST3 CI
 
 on:
   workflow_dispatch:
+    inputs:
+      prepare_release:
+        description: 'Prepare a draft release from this validated build'
+        type: boolean
+        default: false
   merge_group:
   pull_request:
     branches: [main]
@@ -107,13 +112,18 @@ jobs:
           mkdir unpacked
           tar -xzf AetherWave-linux-x86_64.tar.gz -C unpacked
 
-      - name: Load packaged VST3 and test MIDI audio and state recall
+      - name: Check and install the extracted package
+        run: |
+          python3 release/unpacked/install-linux.py --check
+          python3 release/unpacked/install-linux.py --destination "$RUNNER_TEMP/aetherwave-vst3"
+
+      - name: Load installed VST3 and test MIDI audio and state recall
         timeout-minutes: 5
         run: |
           mkdir -p validation-logs
           set -o pipefail
           xvfb-run -a build/AetherWaveSmoke_artefacts/Release/AetherWaveSmoke \
-            "$PWD/release/unpacked/AetherWave.vst3" 2>&1 | tee validation-logs/native-smoke.log
+            "$RUNNER_TEMP/aetherwave-vst3/AetherWave.vst3" 2>&1 | tee validation-logs/native-smoke.log
 
       - name: Checkout pinned pluginval source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -129,14 +139,14 @@ jobs:
           cmake -S build-tools/pluginval -B build-tools/pluginval-build -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build-tools/pluginval-build --target pluginval --parallel 2
 
-      - name: Validate packaged plugin including editor lifecycle
+      - name: Validate installed plugin including editor lifecycle
         timeout-minutes: 10
         run: |
           set -o pipefail
           dbus-run-session -- xvfb-run -a \
             build-tools/pluginval-build/pluginval_artefacts/Release/pluginval \
             --strictness-level 5 --random-seed 12345 --timeout-ms 60000 \
-            --validate "$PWD/release/unpacked/AetherWave.vst3" \
+            --validate "$RUNNER_TEMP/aetherwave-vst3/AetherWave.vst3" \
             2>&1 | tee validation-logs/pluginval.log
 
       - name: Upload validation logs
@@ -156,3 +166,87 @@ jobs:
             release/SHA256SUMS
             release/build-info.json
           if-no-files-found: error
+
+  draft-release:
+    name: Prepare validated draft release
+    needs: linux-vst3
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.prepare_release) ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Download the package from this successful run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: AetherWave-linux-vst3
+          path: release
+
+      - name: Verify checksum, version and source commit
+        env:
+          SOURCE_COMMIT: ${{ github.sha }}
+          SOURCE_REF: ${{ github.ref }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          cd release
+          sha256sum -c SHA256SUMS
+          python3 - <<'PY'
+          import json, os, pathlib, re
+          info = json.loads(pathlib.Path('build-info.json').read_text())
+          version = info['plugin_version']
+          if not re.fullmatch(r'\d+\.\d+\.\d+', version):
+              raise SystemExit('Invalid plugin version for release')
+          if info['source_commit'] != os.environ['SOURCE_COMMIT']:
+              raise SystemExit('Package source does not match this workflow run')
+          tag = 'v' + version
+          source_ref = os.environ['SOURCE_REF']
+          if source_ref.startswith('refs/tags/') and source_ref != 'refs/tags/' + tag:
+              raise SystemExit('Release tag must match the compiled plugin version: ' + tag)
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write('RELEASE_TAG=' + tag + '\n')
+          repo = os.environ['REPOSITORY']
+          run = os.environ['RUN_ID']
+          notes = f'''AetherWave {version} for Linux x86-64 (Ubuntu 24.04 build baseline).
+
+          Source commit: {info['source_commit']}
+          Validated build: https://github.com/{repo}/actions/runs/{run}
+
+          Download AetherWave-linux-x86_64.tar.gz and SHA256SUMS together.
+          Run `sha256sum -c SHA256SUMS`, extract the archive, close REAPER,
+          then run `python3 install-linux.py` inside the extracted directory.
+          Use `--check` for diagnostics or `--replace` to back up an older install.
+          See README-Linux.md inside the package for runtime libraries and setup.
+
+          The installed bundle passed MIDI-to-audio/state recall tests and
+          pluginval strictness 5 including editor tests. REAPER itself has not
+          been certified by CI; complete playback, editor reopen, project recall
+          and offline-render acceptance on the target machine before publishing.
+          '''
+          pathlib.Path('release-notes.md').write_text('\n'.join(line.strip() for line in notes.splitlines()) + '\n')
+          PY
+
+      - name: Create draft release without replacing existing releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_COMMIT: ${{ github.sha }}
+          SOURCE_REF: ${{ github.ref }}
+        run: |
+          # Manual builds use an unused version. Existing tags must be rebuilt
+          # through their tag ref so package and release source cannot diverge.
+          if [[ "$SOURCE_REF" != "refs/tags/$RELEASE_TAG" ]]; then
+            existing_tag=$(gh api "repos/$GH_REPO/git/matching-refs/tags/$RELEASE_TAG" \
+              --jq ".[] | select(.ref == \"refs/tags/$RELEASE_TAG\") | .ref")
+            if [[ -n "$existing_tag" ]]; then
+              echo "::error::Tag already exists; run this workflow on $RELEASE_TAG instead."
+              exit 1
+            fi
+          fi
+          gh release create "$RELEASE_TAG" --draft --prerelease \
+            --target "$SOURCE_COMMIT" \
+            --title "AetherWave $RELEASE_TAG — Linux x86-64" \
+            --notes-file release/release-notes.md \
+            release/AetherWave-linux-x86_64.tar.gz release/SHA256SUMS release/build-info.json
