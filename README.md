@@ -21,6 +21,8 @@
 
 > **Naming:** the repository is **VictorZynth**. The instrument/plugin presented to the host and in the UI is **AetherWave**.
 
+**Linux download:** open a successful `main` run in [Native VST3 CI](https://github.com/MKlolbullen/VictorZynth/actions/workflows/native-vst3.yml?query=branch%3Amain), then download **AetherWave-linux-vst3** under Artifacts (GitHub sign-in required). The package includes the VST3, optional standalone app, checksums, source commit and installation instructions. The historical repository ZIP and release `v.0.1.7` predate the validated package; use a current CI artifact until a new release is published.
+
 ## What is AetherWave?
 
 AetherWave is a real native software instrument: the audio path runs in C++/JUCE, the plugin builds as **VST3 + Standalone**, and the existing React interface is embedded inside the native plugin through a JUCE WebView bridge.
@@ -250,8 +252,16 @@ Release builds embed the production Vite bundle through JUCE `BinaryData`; the V
 After building, copy the generated `AetherWave.vst3` bundle into a VST3 location scanned by REAPER, then rescan plugins.
 
 For CI downloads, unzip the GitHub artifact, verify `SHA256SUMS`, then extract
-`AetherWave-linux-x86_64.tar.gz`. Copy the **whole** `AetherWave.vst3` directory
-into `~/.vst3/`; a loose `.so` or `Contents/` directory is not an installed bundle.
+`AetherWave-linux-x86_64.tar.gz`. Close REAPER and run these commands inside the extracted directory:
+
+```bash
+python3 install-linux.py --check
+python3 install-linux.py
+```
+
+The installer checks runtime libraries and installs the **whole** bundle in
+`~/.vst3/`. To update, use `--replace`; the previous bundle is backed up outside
+the scan directory. A loose `.so` or `Contents/` directory is not an installed bundle.
 See [Linux installation, runtime dependencies and REAPER acceptance checks](docs/REAPER-Linux.md).
 
 The Linux CI artifact is produced at:
@@ -389,12 +399,19 @@ plugin/WebUI/dist/
 
 Native CI uses SHA-pinned Actions, JUCE and pluginval source, plus the committed
 npm lockfile. It validates the Linux ELF, manifest, exports and runtime libraries;
-packages the bundle with permissions intact; tests MIDI-to-audio, layouts,
+packages the bundle with permissions intact; installs it using the shipped installer; tests MIDI-to-audio, layouts,
 sample rates, restart and state recall in a native VST3 host; then runs pluginval
 at strictness 5 including editor tests under Xvfb. Packages are uploaded only if
 all gates pass. This does not claim compatibility with older Linux ABIs or replace
 an actual REAPER playback/project-reopen test. Ubuntu packages and Node 22 patch
 versions still receive updates; this is dependency-locked, not a bit-for-bit build.
+
+To prepare a release, run **Native VST3 CI → Run workflow** on the intended commit's
+branch and enable **Prepare a draft release**. After every native gate passes, a
+separate job creates a draft prerelease named for the compiled version and attaches
+the exact validated archive, checksum and provenance. A `v0.4.0`-style tag push also
+prepares a draft; its version must match the plugin. Existing releases are never
+overwritten. See [release preparation and REAPER acceptance](docs/Releasing.md).
 
 Local regression tests (no audio hardware required):
 

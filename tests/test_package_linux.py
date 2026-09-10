@@ -69,6 +69,7 @@ class PackagingTests(unittest.TestCase):
         archive = packaging.package_build(self.root / "build", self.root / "out", "test-commit")
         with tarfile.open(archive) as tar:
             self.assertIn("AetherWave.vst3/Contents/x86_64-linux/AetherWave.so", tar.getnames())
+            self.assertIn("install-linux.py", tar.getnames())
             self.assertTrue(tar.getmember("standalone/AetherWave").mode & 0o111)
             self.assertEqual(json.load(tar.extractfile("build-info.json"))["source_commit"], "test-commit")
         self.assertTrue((self.root / "out/SHA256SUMS").is_file())
