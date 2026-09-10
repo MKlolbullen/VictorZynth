@@ -1,6 +1,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 
 #include <cmath>
+#include <cstdlib>
 #include <iostream>
 #include <stdexcept>
 
@@ -32,12 +33,58 @@ static float render(juce::AudioPluginInstance& plugin, int blockSize, bool noteO
     return peak;
 }
 
+static void checkEditor(juce::AudioPluginInstance& plugin, const juce::File& report)
+{
+   #if JUCE_LINUX
+    ::setenv("AETHERWAVE_UI_REPORT", report.getFullPathName().toRawUTF8(), 1);
+   #endif
+    for (int round = 0; round < 2; ++round)
+    {
+        report.deleteFile();
+        juce::DocumentWindow window("AetherWave native UI test", juce::Colours::black,
+                                    juce::DocumentWindow::allButtons);
+        window.setUsingNativeTitleBar(true);
+        auto* editor = plugin.createEditorIfNeeded();
+        require(editor != nullptr, "VST3 did not create an editor");
+        window.setContentOwned(editor, true);
+        window.centreWithSize(round == 0 ? 1440 : 1100, round == 0 ? 900 : 760);
+        window.setVisible(true);
+        const auto start = juce::Time::getMillisecondCounter();
+        bool ready = false;
+        while (juce::Time::getMillisecondCounter() - start < 30000)
+        {
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+            const auto status = juce::JSON::parse(report.loadFileAsString());
+            if (status["status"].toString() == "failed")
+                throw std::runtime_error("Native editor failed: " + status["detail"].toString().toStdString());
+            if (status["status"].toString() == "ready")
+            {
+                std::cout << "Editor " << round << ": " << status["detail"].toString() << '\n';
+                ready = true;
+                break;
+            }
+        }
+        require(ready, "Native editor did not render React/CSS and complete a native parameter round-trip");
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(500);
+        juce::ChildProcess capture;
+        require(capture.start(juce::StringArray { "import", "-window", "root",
+            report.getSiblingFile("native-editor-" + juce::String(round) + ".png").getFullPathName() }),
+            "Could not start native editor screenshot capture");
+        require(capture.waitForProcessToFinish(5000) && capture.getExitCode() == 0,
+                "Native editor screenshot capture failed");
+        window.clearContentComponent();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(250);
+    }
+    std::cout << "PASS: actual VST3 editor renders React, CSS and canvases; native bridge round-trip, reopen and resize\n";
+}
+
 int main(int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juceInitialiser;
     try
     {
-        require(argc == 2, "Usage: AetherWaveSmoke /path/to/AetherWave.vst3");
+        require(argc == 2 || (argc == 4 && juce::String(argv[2]) == "--editor"),
+                "Usage: AetherWaveSmoke /path/to/AetherWave.vst3 [--editor /absolute/report.json]");
         juce::VST3PluginFormat format;
         juce::OwnedArray<juce::PluginDescription> descriptions;
         format.findAllTypesForFile(descriptions, juce::File(argv[1]).getFullPathName());
@@ -96,6 +143,8 @@ int main(int argc, char** argv)
         plugin->setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
         require(std::abs(parameter->getValue()) < 1.0e-5f, "Host parameter state did not restore");
         plugin->releaseResources();
+        if (argc == 4)
+            checkEditor(*plugin, juce::File(argv[3]));
         std::cout << "PASS: VST3 discovery, instantiation, MIDI audio, finite samples, "
                      "input layouts, zero/variable blocks, restart, state restore\n";
         return 0;

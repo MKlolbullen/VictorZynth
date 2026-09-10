@@ -78,3 +78,39 @@ package names; build locally on older distributions rather than replacing glibc.
 CI installs the extracted package, then loads the installed module and checks MIDI audio, state recall, layouts and
 sample rates, then runs pluginval including GUI tests under a virtual display.
 This is host-compatibility evidence, not a substitute for the REAPER steps above.
+
+## Blank editor or basic controls
+
+The original 0.4.0 Linux builds can produce sound while both editor windows stay
+blank. The pinned JUCE backend supplied a Content-Type header for its `juce://`
+resources but omitted WebKitGTK's separate response content-type field. WebKit
+interrupted the HTML load before requesting JavaScript or CSS. Installing more
+audio libraries does not correct that code defect.
+
+Version **0.4.1** patches the WebKit response setup. Download a 0.4.1 package,
+close REAPER and the standalone, then install with `python3 install-linux.py --replace`
+and rescan in REAPER. Check `plugin_version` in `build-info.json` to distinguish
+the new package from an older download with a similar filename.
+
+The editor now displays loading status and switches to native **basic parameter
+controls** if its WebView fails or does not initialise within 20 seconds. The
+**Retry full interface** button starts a fresh WebView. These basic controls keep
+the synth usable but do not replace the full modulation matrix and performance UI.
+
+If 0.4.1 still falls back, close all REAPER instances and launch one from a terminal:
+
+```bash
+AETHERWAVE_UI_REPORT="$HOME/aetherwave-ui.json" reaper
+```
+
+For the standalone, run from the extracted package directory:
+
+```bash
+AETHERWAVE_UI_REPORT="$HOME/aetherwave-ui.json" ./standalone/AetherWave
+```
+
+Open the plugin and inspect `~/aetherwave-ui.json`. It records the plugin version,
+startup status and UI-readiness details (control/canvas counts, CSS, native bridge,
+or a load error). Supply that report with the distribution, X11/Wayland session
+and GPU/driver if further diagnosis is needed. It is opt-in and does not collect
+parameter snapshots or AI settings.

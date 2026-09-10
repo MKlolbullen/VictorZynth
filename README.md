@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/MKlolbullen/VictorZynth/actions/workflows/native-vst3.yml"><img src="https://github.com/MKlolbullen/VictorZynth/actions/workflows/native-vst3.yml/badge.svg" alt="Native VST3 CI" /></a>
-  <img src="https://img.shields.io/badge/version-0.4.0-22d3ee" alt="Version 0.4.0" />
+  <img src="https://img.shields.io/badge/version-0.4.1-22d3ee" alt="Version 0.4.1" />
   <img src="https://img.shields.io/badge/JUCE-9.0.2-8b5cf6" alt="JUCE 9.0.2" />
   <img src="https://img.shields.io/badge/plugin-VST3-10b981" alt="VST3" />
   <img src="https://img.shields.io/badge/C%2B%2B-20-00599C" alt="C++20" />
@@ -22,6 +22,10 @@
 > **Naming:** the repository is **VictorZynth**. The instrument/plugin presented to the host and in the UI is **AetherWave**.
 
 **Linux download:** open a successful `main` run in [Native VST3 CI](https://github.com/MKlolbullen/VictorZynth/actions/workflows/native-vst3.yml?query=branch%3Amain), then download **AetherWave-linux-vst3** under Artifacts (GitHub sign-in required). The package includes the VST3, optional standalone app, checksums, source commit and installation instructions. The historical repository ZIP and release `v.0.1.7` predate the validated package; use a current CI artifact until a new release is published.
+
+**Blank Linux editor in 0.4.0?** Version **0.4.1** fixes the WebKit response MIME type
+that prevented the embedded page from loading. Upgrade the whole bundle using the
+new package's installer with `--replace`. See [blank-editor diagnostics](docs/REAPER-Linux.md#blank-editor-or-basic-controls).
 
 ## What is AetherWave?
 
@@ -398,10 +402,15 @@ plugin/WebUI/dist/
 ## Project structure
 
 Native CI uses SHA-pinned Actions, JUCE and pluginval source, plus the committed
-npm lockfile. It validates the Linux ELF, manifest, exports and runtime libraries;
+npm lockfile. A focused CMake patch sets the WebKit URI response content type in
+the pinned JUCE 9.0.2 source. CI verifies that the production UI renders in real
+WebKitGTK, then validates the Linux ELF, manifest, exports and runtime libraries;
 packages the bundle with permissions intact; installs it using the shipped installer; tests MIDI-to-audio, layouts,
 sample rates, restart and state recall in a native VST3 host; then runs pluginval
-at strictness 5 including editor tests under Xvfb. Packages are uploaded only if
+at strictness 5 including editor tests under Xvfb. The actual installed VST3 and
+standalone must also render React controls, CSS and canvases and complete a native
+parameter round-trip. VST3 editor reopen/resize and screenshots are included.
+Packages are uploaded only if
 all gates pass. This does not claim compatibility with older Linux ABIs or replace
 an actual REAPER playback/project-reopen test. Ubuntu packages and Node 22 patch
 versions still receive updates; this is dependency-locked, not a bit-for-bit build.
