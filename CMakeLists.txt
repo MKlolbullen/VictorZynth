@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(VictorZynth VERSION 0.4.0 LANGUAGES C CXX)
+project(VictorZynth VERSION 0.4.1 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,6 +15,8 @@ FetchContent_Declare(
     JUCE
     GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
     GIT_TAG 72782788ce18c2d4d760b28e0921d6ffc6431102 # JUCE 9.0.2
+    PATCH_COMMAND ${CMAKE_COMMAND} -DJUCE_SOURCE_DIR=<SOURCE_DIR>
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/PatchJuceWebKit.cmake
 )
 FetchContent_MakeAvailable(JUCE)
 
@@ -135,7 +137,8 @@ if(AETHERWAVE_BUILD_TESTS)
     juce_add_console_app(AetherWaveSmoke PRODUCT_NAME "AetherWaveSmoke")
     target_sources(AetherWaveSmoke PRIVATE tests/NativeSmoke.cpp)
     target_compile_definitions(AetherWaveSmoke PRIVATE
-        JUCE_PLUGINHOST_VST3=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+        JUCE_PLUGINHOST_VST3=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
+        JUCE_MODAL_LOOPS_PERMITTED=1 JUCE_GUI_BASICS_INCLUDE_XHEADERS=1)
     target_link_libraries(AetherWaveSmoke PRIVATE
         juce::juce_audio_utils juce::juce_recommended_config_flags)
     add_dependencies(AetherWaveSmoke VictorZynth_VST3)

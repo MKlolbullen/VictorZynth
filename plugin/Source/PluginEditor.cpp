@@ -46,6 +46,18 @@ VictorZynthAudioProcessorEditor::makeBrowserOptions(VictorZynthAudioProcessor& p
 {
     auto options = juce::WebBrowserComponent::Options{}
         .withNativeIntegrationEnabled()
+        .withKeepPageLoadedWhenBrowserIsHidden()
+        .withUserScript(R"JS(
+            window.__AETHERWAVE_BOOT_ERRORS__ = [];
+            window.addEventListener('error', function(event) {
+                var message = event.message || ('Failed to load ' +
+                    (event.target && (event.target.src || event.target.href) || 'resource'));
+                window.__AETHERWAVE_BOOT_ERRORS__.push(String(message).slice(0, 500));
+            }, true);
+            window.addEventListener('unhandledrejection', function(event) {
+                window.__AETHERWAVE_BOOT_ERRORS__.push(String(event.reason).slice(0, 500));
+            });
+        )JS")
         .withNativeFunction("getParameter", [&processor](const auto& args, auto complete)
         {
             if (args.isEmpty())
@@ -244,23 +256,150 @@ VictorZynthAudioProcessorEditor::getResource(const juce::String& rawUrl)
 
 bool VictorZynthAudioProcessorEditor::RestrictedBrowser::pageAboutToLoad(const juce::String& newURL)
 {
-    return newURL.startsWith(devServerAddress)
+    return newURL == "about:blank"
+        || newURL.startsWith(devServerAddress)
         || newURL.startsWith(juce::WebBrowserComponent::getResourceProviderRoot());
 }
 
-VictorZynthAudioProcessorEditor::VictorZynthAudioProcessorEditor(VictorZynthAudioProcessor& p)
-    : AudioProcessorEditor(&p), processor(p), browser(makeBrowserOptions(p))
+bool VictorZynthAudioProcessorEditor::RestrictedBrowser::pageLoadHadNetworkError(const juce::String& error)
 {
-    addAndMakeVisible(browser);
+    if (onLoadError)
+        onLoadError(error);
+    return false;
+}
+
+VictorZynthAudioProcessorEditor::VictorZynthAudioProcessorEditor(VictorZynthAudioProcessor& p)
+    : AudioProcessorEditor(&p), processor(p)
+{
+    statusLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+    statusLabel.setJustificationType(juce::Justification::centredLeft);
+    retryButton.onClick = [this] { restartBrowser(); };
+    addAndMakeVisible(statusLabel);
+    addChildComponent(retryButton);
     setResizable(true, true);
     setResizeLimits(900, 600, 2200, 1400);
     setSize(1440, 900);
+    restartBrowser();
+}
+
+VictorZynthAudioProcessorEditor::~VictorZynthAudioProcessorEditor()
+{
+    stopTimer();
+    browser.reset();
+}
+
+void VictorZynthAudioProcessorEditor::restartBrowser()
+{
+    stopTimer();
+    ++browserGeneration;
+    evaluationPending = false;
+    lastProbe.clear();
+    fallback.reset();
+    browser.reset();
+    statusLabel.setText("Loading AetherWave interface...", juce::dontSendNotification);
+    statusLabel.setVisible(true);
+    retryButton.setVisible(false);
+    browser = std::make_unique<RestrictedBrowser>(makeBrowserOptions(processor));
+    browser->onLoadError = [safe = juce::Component::SafePointer<VictorZynthAudioProcessorEditor>(this)](const juce::String& error)
+    {
+        if (safe != nullptr)
+            safe->showFallback("WebView load failed: " + error);
+    };
+    addAndMakeVisible(*browser);
+    resized();
+    startupTime = juce::Time::getMillisecondCounter();
+    reportUi("loading", "Waiting for React controls, stylesheet and native parameter bridge");
 
    #if AETHERWAVE_WEB_DEV_SERVER
-    browser.goToURL(devServerAddress);
+    browser->goToURL(devServerAddress);
    #else
-    browser.goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
+    browser->goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
    #endif
+    startTimer(250);
+}
+
+void VictorZynthAudioProcessorEditor::reportUi(const juce::String& status, const juce::String& detail)
+{
+    juce::Logger::writeToLog("AetherWave UI " + status + ": " + detail);
+    // Opt-in diagnostics/CI only. No parameter values, prompts or API keys.
+    const auto path = juce::SystemStats::getEnvironmentVariable("AETHERWAVE_UI_REPORT", {});
+    if (path.isEmpty())
+        return;
+    auto object = std::make_unique<juce::DynamicObject>();
+    object->setProperty("status", status);
+    object->setProperty("detail", detail);
+    object->setProperty("pluginVersion", JucePlugin_VersionString);
+    const juce::File file(path);
+    file.getParentDirectory().createDirectory();
+    file.replaceWithText(juce::JSON::toString(juce::var(object.release())));
+}
+
+void VictorZynthAudioProcessorEditor::showFallback(const juce::String& reason)
+{
+    stopTimer();
+    if (fallback != nullptr)
+        return;
+    reportUi("failed", reason);
+    statusLabel.setText("Full interface unavailable. Basic controls are active. " + reason,
+                        juce::dontSendNotification);
+    statusLabel.setVisible(true);
+    retryButton.setVisible(true);
+    browser->setVisible(false);
+    fallback = std::make_unique<juce::GenericAudioProcessorEditor>(processor);
+    addAndMakeVisible(*fallback);
+    resized();
+}
+
+void VictorZynthAudioProcessorEditor::timerCallback()
+{
+    if (juce::Time::getMillisecondCounter() - startupTime > 20000)
+    {
+        showFallback("WebView startup timed out. " + lastProbe);
+        return;
+    }
+    if (evaluationPending || browser == nullptr || fallback != nullptr)
+        return;
+    evaluationPending = true;
+    browser->evaluateJavascript(R"JS((function() {
+        var root = document.getElementById('root');
+        var app = root && root.firstElementChild;
+        var background = app ? getComputedStyle(app).backgroundColor : '';
+        return JSON.stringify({
+            controls: document.querySelectorAll('#root button').length,
+            canvases: document.querySelectorAll('#root canvas').length,
+            height: root ? root.getBoundingClientRect().height : 0,
+            styled: !!background && background !== 'rgba(0, 0, 0, 0)' && background !== 'transparent',
+            bridge: window.__AETHERWAVE_NATIVE_READY__ === true,
+            errors: (window.__AETHERWAVE_BOOT_ERRORS__ || []).slice(0, 3)
+        });
+    })())JS", [safe = juce::Component::SafePointer<VictorZynthAudioProcessorEditor>(this),
+               generation = browserGeneration](juce::WebBrowserComponent::EvaluationResult result)
+    {
+        if (safe == nullptr || safe->browserGeneration != generation || safe->fallback != nullptr)
+            return;
+        safe->evaluationPending = false;
+        if (const auto* error = result.getError())
+        {
+            safe->lastProbe = error->message;
+            return;
+        }
+        if (const auto* value = result.getResult())
+        {
+            safe->lastProbe = value->toString();
+            const auto status = juce::JSON::parse(safe->lastProbe);
+            if (static_cast<int>(status["controls"]) > 10
+                && static_cast<int>(status["canvases"]) > 0
+                && static_cast<double>(status["height"]) > 400.0
+                && static_cast<bool>(status["styled"])
+                && static_cast<bool>(status["bridge"]))
+            {
+                safe->stopTimer();
+                safe->statusLabel.setVisible(false);
+                safe->resized();
+                safe->reportUi("ready", safe->lastProbe);
+            }
+        }
+    });
 }
 
 void VictorZynthAudioProcessorEditor::paint(juce::Graphics& g)
@@ -270,5 +409,16 @@ void VictorZynthAudioProcessorEditor::paint(juce::Graphics& g)
 
 void VictorZynthAudioProcessorEditor::resized()
 {
-    browser.setBounds(getLocalBounds());
+    auto area = getLocalBounds();
+    if (statusLabel.isVisible())
+    {
+        auto header = area.removeFromTop(fallback != nullptr ? 64 : 36);
+        if (retryButton.isVisible())
+            retryButton.setBounds(header.removeFromRight(170).reduced(5));
+        statusLabel.setBounds(header.reduced(8, 0));
+    }
+    if (browser != nullptr)
+        browser->setBounds(area);
+    if (fallback != nullptr)
+        fallback->setBounds(area);
 }

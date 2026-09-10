@@ -63,7 +63,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake pkg-config python3 file binutils \
-            xvfb xauth dbus-x11 ladspa-sdk \
+            xvfb xauth dbus-x11 ladspa-sdk imagemagick openbox x11-utils python3-gi python3-gi-cairo gir1.2-webkit2-4.1 \
             ninja-build \
             libasound2-dev \
             libjack-jackd2-dev \
@@ -80,6 +80,15 @@ jobs:
             libglu1-mesa-dev \
             mesa-common-dev \
             libcurl4-openssl-dev
+
+      - name: Verify production React UI in Linux WebKit
+        timeout-minutes: 2
+        run: |
+          mkdir -p validation-logs
+          set -o pipefail
+          dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/webkit_ui_probe.py \
+            plugin/WebUI/dist --screenshot validation-logs/webkit-ui.png \
+            2>&1 | tee validation-logs/webkit-ui.log
 
       - name: Configure
         run: >-
@@ -113,6 +122,7 @@ jobs:
           tar -xzf AetherWave-linux-x86_64.tar.gz -C unpacked
 
       - name: Check and install the extracted package
+        id: install
         run: |
           python3 release/unpacked/install-linux.py --check
           python3 release/unpacked/install-linux.py --destination "$RUNNER_TEMP/aetherwave-vst3"
@@ -122,8 +132,20 @@ jobs:
         run: |
           mkdir -p validation-logs
           set -o pipefail
-          xvfb-run -a build/AetherWaveSmoke_artefacts/Release/AetherWaveSmoke \
-            "$RUNNER_TEMP/aetherwave-vst3/AetherWave.vst3" 2>&1 | tee validation-logs/native-smoke.log
+          dbus-run-session -- xvfb-run -a -s "-screen 0 1600x1000x24" \
+            bash tests/with_window_manager.sh \
+            build/AetherWaveSmoke_artefacts/Release/AetherWaveSmoke \
+            "$RUNNER_TEMP/aetherwave-vst3/AetherWave.vst3" \
+            --editor "$PWD/validation-logs/native-ui.json" 2>&1 | tee validation-logs/native-smoke.log
+
+      - name: Verify actual standalone editor rendering
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        timeout-minutes: 2
+        run: >-
+          dbus-run-session -- xvfb-run -a -s "-screen 0 1600x1000x24"
+          bash tests/with_window_manager.sh
+          python3 tests/standalone_ui_probe.py
+          release/unpacked/standalone/AetherWave validation-logs
 
       - name: Checkout pinned pluginval source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
