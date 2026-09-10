@@ -81,6 +81,11 @@ static void checkEditor(juce::AudioPluginInstance& plugin, const juce::File& rep
 int main(int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juceInitialiser;
+   #if JUCE_LINUX
+    // Initialise Xlib on the host thread before loading a plugin that starts
+    // its own JUCE message thread. ScopedJuceInitialiser_GUI alone is lazy.
+    juce::XWindowSystem::getInstance();
+   #endif
     try
     {
         require(argc == 2 || (argc == 4 && juce::String(argv[2]) == "--editor"),

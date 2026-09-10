@@ -138,7 +138,7 @@ if(AETHERWAVE_BUILD_TESTS)
     target_sources(AetherWaveSmoke PRIVATE tests/NativeSmoke.cpp)
     target_compile_definitions(AetherWaveSmoke PRIVATE
         JUCE_PLUGINHOST_VST3=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
-        JUCE_MODAL_LOOPS_PERMITTED=1)
+        JUCE_MODAL_LOOPS_PERMITTED=1 JUCE_GUI_BASICS_INCLUDE_XHEADERS=1)
     target_link_libraries(AetherWaveSmoke PRIVATE
         juce::juce_audio_utils juce::juce_recommended_config_flags)
     add_dependencies(AetherWaveSmoke VictorZynth_VST3)
