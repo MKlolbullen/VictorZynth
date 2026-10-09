@@ -23,6 +23,7 @@ import { ModulationMatrix } from './components/ModulationMatrix';
 import { EffectsSection } from './components/EffectsSection';
 import { VisualizerSection } from './components/VisualizerSection';
 import { VirtualKeyboard } from './components/VirtualKeyboard';
+import { MelodyLibrary } from './components/MelodyLibrary';
 import { ReaperExportModal } from './components/ReaperExportModal';
 
 // Deep clone helper for immutable state snapshots in undo/redo stack
@@ -631,6 +632,14 @@ export default function App() {
           onEffectsChange={(params) =>
             updateSynth({ effects: { ...synthState.effects, ...params } })
           }
+        />
+
+        <MelodyLibrary
+          onEnsureAudio={async () => {
+            if (!isAudioRunning) await handleStartAudio();
+          }}
+          onNoteOn={(note, vel) => engineRef.current?.noteOn(note, vel)}
+          onNoteOff={(note) => engineRef.current?.noteOff(note)}
         />
 
         {/* Interactive Virtual Keyboard & Drone Mode */}
