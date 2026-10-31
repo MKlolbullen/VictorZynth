@@ -27,6 +27,56 @@
 that prevented the embedded page from loading. Upgrade the whole bundle using the
 new package's installer with `--replace`. See [blank-editor diagnostics](docs/REAPER-Linux.md#blank-editor-or-basic-controls).
 
+<div align="center">
+
+### From a browser synth experiment to a native VST3 instrument
+
+**Wavetable synthesis · JUCE DSP · React interface · HUM → MIDI · Arpeggiator · AI-assisted composition**
+
+[**Get the Linux build**](#download-and-install) · [**Explore the features**](#highlights) · [**Build from source**](#building) · [**REAPER guide**](#reaper-usage)
+
+</div>
+
+> **Project status:** AetherWave is actively evolving. A successful CI-built artifact and native-host validation are not the same as verified compatibility with your particular REAPER installation, audio interface, or Linux distribution. Test with a disposable project first.
+
+## At a glance
+
+| Component | Implementation |
+| --- | --- |
+| Audio engine | Native C++20 / JUCE 9.0.2; 16-voice wavetable synthesizer |
+| Interface | React 19 / TypeScript, embedded through JUCE WebView |
+| Performance | DAW MIDI, virtual keyboard, four-way tempo-synced arpeggiator, experimental HUM → MIDI |
+| Sound shaping | Wavetable morphing, modulation, native effects and optional mastering chain |
+| Composition | AI-assisted MIDI generation and local MIDI library |
+| Builds | Linux VST3 + standalone, verified by automated native-host checks in CI |
+| Recent web-synth addition | Five bundled MIDI melodies and six auditionable PCM samples (PR #12) |
+
+## Download and install
+
+**Linux:** use a successful [Native VST3 CI run on `main`](https://github.com/MKlolbullen/VictorZynth/actions/workflows/native-vst3.yml?query=branch%3Amain), download **AetherWave-linux-vst3** from its artifacts and verify the included `SHA256SUMS` before installation.
+
+```bash
+# From inside the extracted artifact directory:
+python3 install-linux.py --check
+python3 install-linux.py
+```
+
+Close REAPER before installing. For an upgrade, follow [the Linux installation guide](docs/REAPER-Linux.md) and use `--replace` as instructed. The checked-in historical ZIP/release should **not** be assumed to contain the latest CI-validated build.
+
+**Build locally:** see [Building](#building) for the full CMake/Ninja workflow and Linux dependencies.
+
+## Project orientation
+
+The repository name is **VictorZynth**; the instrument is **AetherWave**.
+
+Its native audio processor is implemented in JUCE/C++, while the embedded React interface controls parameters and displays live telemetry. The browser-only synthesizer remains available as a separate development/preview mode: it is **not** evidence that the native VST3 behaves identically.
+
+The native plugin can be used as a MIDI instrument, and its microphone pitch-tracking feature can translate a monophonic input into MIDI notes. Optional AI MIDI tools support cloud providers and local OpenAI-compatible endpoints; provider credentials are separate from DAW project state.
+
+This is a personal synthesizer engineering project, not a claim of commercial-grade mastering, universal Linux support or fully validated microphone-to-MIDI accuracy.
+
+---
+
 ## What is AetherWave?
 
 AetherWave is a real native software instrument: the audio path runs in C++/JUCE, the plugin builds as **VST3 + Standalone**, and the existing React interface is embedded inside the native plugin through a JUCE WebView bridge.
